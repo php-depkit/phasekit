@@ -54,6 +54,30 @@ export type {
   RunStageTransitionInput,
 } from "./runs/lifecycle";
 export {
+  toPhasesState,
+  validateGrillMeQuestionAnswer,
+  validateGrillMeQuestion,
+  validatePhaseSlices,
+  validateRequirementCoverage,
+} from "./planning/slices";
+export type {
+  CodebaseContextScoutInput,
+  CodebaseContextScoutResult,
+  ContextScout,
+  GrillMeAnsweredQuestion,
+  GrillMeCustomAnswer,
+  GrillMeQuestion,
+  GrillMeQuestionAnswer,
+  GrillMeQuestionOption,
+  GrillMeSelectedRecommendedOption,
+  PhaseCoverageReference,
+  PhaseSlice,
+  PhaseSlicer,
+  RequirementCoverageBlocker,
+  SliceSourceRequirementsInput,
+  ValidateRequirementCoverageOptions,
+} from "./planning/slices";
+export {
   getNextAction,
   getStatus,
 } from "./status/index";
@@ -106,6 +130,7 @@ export {
   sourceReferenceSchema,
 } from "./state/schema";
 export type {
+  PhaseStatus,
   PhasesState,
   ProjectState,
   Requirement,

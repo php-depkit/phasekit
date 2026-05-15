@@ -122,6 +122,7 @@ export type ProjectState = z.infer<typeof projectStateSchema>;
 export type SourceReference = z.infer<typeof sourceReferenceSchema>;
 export type Requirement = z.infer<typeof requirementSchema>;
 export type RequirementsState = z.infer<typeof requirementsStateSchema>;
+export type PhaseStatus = z.infer<typeof phaseStatusSchema>;
 export type PhasesState = z.infer<typeof phasesStateSchema>;
 export type RulesState = z.infer<typeof rulesStateSchema>;
 export type RunState = z.infer<typeof runStateSchema>;
