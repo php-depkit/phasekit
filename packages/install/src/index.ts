@@ -4,12 +4,31 @@ import { join } from "node:path";
 
 export const installPackageName = "@phasekit/install" as const;
 
-const managedMarker = "<!-- phasekit:managed opencode-command v1 -->";
+const commandManagedMarker = "<!-- phasekit:managed opencode-command v1 -->";
+const agentManagedMarker = "<!-- phasekit:managed opencode-agent v1 -->";
 
 export type OpenCodeCommandName = "pk-init" | "pk-status" | "pk-next" | "pk-config";
+export type OpenCodeAgentName =
+  | "orchestrator"
+  | "context-scout"
+  | "prd-ingestor"
+  | "grill-me"
+  | "slice-planner"
+  | "task-planner"
+  | "executor"
+  | "reviewer"
+  | "verifier"
+  | "repairer"
+  | "docs-writer";
 
 export type OpenCodeCommandArtifact = {
   name: OpenCodeCommandName;
+  path: string;
+  content: string;
+};
+
+export type OpenCodeAgentArtifact = {
+  name: OpenCodeAgentName;
   path: string;
   content: string;
 };
@@ -19,9 +38,16 @@ export type InstallOpenCodeCommandArtifactsOptions = {
   configRoot?: string;
 };
 
+export type InstallOpenCodeAgentArtifactsOptions = InstallOpenCodeCommandArtifactsOptions;
+
 export type InstallOpenCodeCommandArtifactsResult = {
   commandsDir: string;
   artifacts: OpenCodeCommandArtifact[];
+};
+
+export type InstallOpenCodeAgentArtifactsResult = {
+  agentsDir: string;
+  artifacts: OpenCodeAgentArtifact[];
 };
 
 export function describeInstallPackage(): { name: typeof installPackageName } {
@@ -30,6 +56,10 @@ export function describeInstallPackage(): { name: typeof installPackageName } {
 
 export function getOpenCodeCommandsDir(options: InstallOpenCodeCommandArtifactsOptions = {}): string {
   return join(options.configRoot ?? join(options.homeDir ?? homedir(), ".config"), "opencode", "commands");
+}
+
+export function getOpenCodeAgentsDir(options: InstallOpenCodeAgentArtifactsOptions = {}): string {
+  return join(options.configRoot ?? join(options.homeDir ?? homedir(), ".config"), "opencode", "agents");
 }
 
 export function generateOpenCodeCommandArtifacts(
@@ -53,17 +83,51 @@ export async function installOpenCodeCommandArtifacts(
   await mkdir(commandsDir, { recursive: true });
 
   for (const artifact of artifacts) {
-    await assertManagedOrMissing(artifact.path);
+    await assertManagedOrMissing(artifact.path, commandManagedMarker, "command");
     await writeFile(artifact.path, artifact.content, "utf8");
   }
 
   return { commandsDir, artifacts };
 }
 
+export function generateOpenCodeAgentArtifacts(
+  options: InstallOpenCodeAgentArtifactsOptions = {},
+): OpenCodeAgentArtifact[] {
+  const agentsDir = getOpenCodeAgentsDir(options);
+
+  return agentTemplates.map((template) => ({
+    name: template.name,
+    path: join(agentsDir, `${template.name}.md`),
+    content: renderAgent(template),
+  }));
+}
+
+export async function installOpenCodeAgentArtifacts(
+  options: InstallOpenCodeAgentArtifactsOptions = {},
+): Promise<InstallOpenCodeAgentArtifactsResult> {
+  const agentsDir = getOpenCodeAgentsDir(options);
+  const artifacts = generateOpenCodeAgentArtifacts(options);
+
+  await mkdir(agentsDir, { recursive: true });
+
+  for (const artifact of artifacts) {
+    await assertManagedOrMissing(artifact.path, agentManagedMarker, "agent");
+    await writeFile(artifact.path, artifact.content, "utf8");
+  }
+
+  return { agentsDir, artifacts };
+}
+
 type CommandTemplate = {
   name: OpenCodeCommandName;
   description: string;
   body: string[];
+};
+
+type AgentTemplate = {
+  name: OpenCodeAgentName;
+  description: string;
+  responsibility: string;
 };
 
 const commandTemplates: CommandTemplate[] = [
@@ -101,9 +165,67 @@ const commandTemplates: CommandTemplate[] = [
   },
 ];
 
+const agentTemplates: AgentTemplate[] = [
+  {
+    name: "orchestrator",
+    description: "Coordinate approved Phasekit stages through native tools.",
+    responsibility: "Use approved Phasekit plans and native Phasekit tools to report status, next actions, and blockers without inventing state transitions.",
+  },
+  {
+    name: "context-scout",
+    description: "Find relevant project context for Phasekit planning.",
+    responsibility: "Inspect project code, tests, routes, schemas, and conventions requested by an approved plan, then report concrete findings only.",
+  },
+  {
+    name: "prd-ingestor",
+    description: "Extract requirements from approved product inputs.",
+    responsibility: "Extract requirements, acceptance criteria, non-goals, and ambiguity from provided source material for native Phasekit ingestion tools to validate.",
+  },
+  {
+    name: "grill-me",
+    description: "Ask focused questions for ambiguous Phasekit requirements.",
+    responsibility: "Surface blocking ambiguities as high-signal questions when implementation would otherwise require assumptions.",
+  },
+  {
+    name: "slice-planner",
+    description: "Propose small Phasekit implementation slices.",
+    responsibility: "Turn validated requirements and context into small vertical phase proposals for native Phasekit validators to accept or reject.",
+  },
+  {
+    name: "task-planner",
+    description: "Propose scoped tasks for one approved phase.",
+    responsibility: "Break one approved phase into small tasks with source coverage and checks, leaving validation to native Phasekit tools.",
+  },
+  {
+    name: "executor",
+    description: "Implement one scoped Phasekit task.",
+    responsibility: "Make only the changes requested by one approved task and stop with a blocker when scope is unclear or drifting.",
+  },
+  {
+    name: "reviewer",
+    description: "Review scoped Phasekit changes for correctness.",
+    responsibility: "Review changed code against the approved plan, requirements, project conventions, and regression risks without marking work complete.",
+  },
+  {
+    name: "verifier",
+    description: "Verify Phasekit requirements and project fit.",
+    responsibility: "Run or inspect only approved checks and report verification evidence for native Phasekit tools to record.",
+  },
+  {
+    name: "repairer",
+    description: "Repair focused Phasekit verification failures.",
+    responsibility: "Fix only the specific verified failure or blocker assigned by an approved plan, then return for review and verification.",
+  },
+  {
+    name: "docs-writer",
+    description: "Draft factual Phasekit project documentation.",
+    responsibility: "Create user-facing documentation from actual project files, commands, and approved requirements without inventing behavior.",
+  },
+];
+
 function renderCommand(template: CommandTemplate): string {
   return [
-    managedMarker,
+    commandManagedMarker,
     "---",
     `description: ${template.description}`,
     "---",
@@ -115,7 +237,41 @@ function renderCommand(template: CommandTemplate): string {
   ].join("\n");
 }
 
-async function assertManagedOrMissing(path: string): Promise<void> {
+function renderAgent(template: AgentTemplate): string {
+  return [
+    agentManagedMarker,
+    "---",
+    `description: ${template.description}`,
+    "---",
+    "",
+    `# ${template.name}`,
+    "",
+    "You are a Phasekit sub-agent stub. Stay within the active approved plan and use Phasekit plugin tools as the executable surface.",
+    "",
+    "## Responsibility",
+    "",
+    template.responsibility,
+    "",
+    "## Hard Rules",
+    "",
+    "- Do not make assumptions when an answer affects architecture, public behavior, state schema, plugin behavior, command names, persistence, or implementation scope.",
+    "- Do not perform broad rewrites, unrelated refactors, or scope expansion beyond the assigned approved plan.",
+    "- Do not continue through scope drift; stop and report a blocker with the specific missing decision or validation.",
+    "- Do not add compatibility with old GSD commands, workflows, naming, or behavior.",
+    "- Do not treat markdown artifacts, chat history, summaries, or generated files as runtime state or proof of completion.",
+    "- Do not bypass native Phasekit tool validation; tools own state transitions, completion, artifact writes, and verification records.",
+    "- Do not register OpenCode commands or agents at runtime from plugin code; visibility comes from generated artifacts.",
+    "",
+    "## Tool-Focused Workflow",
+    "",
+    "1. Read the approved plan and relevant Phasekit state before acting.",
+    "2. Use available Phasekit plugin tools for status, next action, validation, artifact writing, and state changes when those tools exist.",
+    "3. Report concrete findings, changes, checks, blockers, and tool results without inventing missing Phasekit behavior.",
+    "",
+  ].join("\n");
+}
+
+async function assertManagedOrMissing(path: string, marker: string, artifactKind: "command" | "agent"): Promise<void> {
   let existing: string;
 
   try {
@@ -128,8 +284,8 @@ async function assertManagedOrMissing(path: string): Promise<void> {
     throw error;
   }
 
-  if (!existing.startsWith(managedMarker)) {
-    throw new Error(`Refusing to overwrite unmanaged OpenCode command artifact: ${path}`);
+  if (!existing.startsWith(marker)) {
+    throw new Error(`Refusing to overwrite unmanaged OpenCode ${artifactKind} artifact: ${path}`);
   }
 }
 
