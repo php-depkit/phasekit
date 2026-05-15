@@ -29,6 +29,17 @@ export type {
   IngestTextInput,
 } from "./ingest/paths";
 export {
+  assignSourceRequirementIds,
+  extractSourceRequirements,
+} from "./ingest/requirements";
+export type {
+  AssignRequirementIdsOptions,
+  ExtractSourceRequirementsOptions,
+  RequirementExtractor,
+  SourceRequirementCandidate,
+  SourceRequirementSource,
+} from "./ingest/requirements";
+export {
   allowedRunStageTransitions,
   getAllowedNextRunStages,
   runBlockerSchema,
@@ -97,7 +108,9 @@ export {
 export type {
   PhasesState,
   ProjectState,
+  Requirement,
   RequirementsState,
   RulesState,
   RunState,
+  SourceReference,
 } from "./state/schema";
