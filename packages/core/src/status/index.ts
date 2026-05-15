@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import type { ZodType } from "zod";
 
 import { getAllowedNextRunStages } from "../runs/lifecycle";
 import {
@@ -107,19 +108,33 @@ export type GetStatusOptions = {
 
 async function readOptionalPlanningState(rootDir: string, runId?: string): Promise<StatusStateInput> {
   const planningDir = join(rootDir, ".planning");
+  let project: ProjectState;
 
   try {
-    const [project, requirements, phases, runs] = await Promise.all([
-      readJsonFile(join(planningDir, "project.json"), projectStateSchema),
-      readJsonFile(join(planningDir, "requirements.json"), requirementsStateSchema),
-      readJsonFile(join(planningDir, "phases.json"), phasesStateSchema),
-      readRuns(planningDir, runId),
-    ]);
-
-    return { initialized: true, project, requirements, phases, runs };
+    project = await readJsonFile(join(planningDir, "project.json"), projectStateSchema);
   } catch (error) {
     if (isNotFoundError(error)) {
       return { initialized: false };
+    }
+
+    throw error;
+  }
+
+  const [requirements, phases, runs] = await Promise.all([
+    readRequiredPlanningFile(planningDir, "requirements.json", requirementsStateSchema),
+    readRequiredPlanningFile(planningDir, "phases.json", phasesStateSchema),
+    readRuns(planningDir, runId),
+  ]);
+
+  return { initialized: true, project, requirements, phases, runs };
+}
+
+async function readRequiredPlanningFile<T>(planningDir: string, fileName: string, schema: ZodType<T>): Promise<T> {
+  try {
+    return await readJsonFile(join(planningDir, fileName), schema);
+  } catch (error) {
+    if (isNotFoundError(error)) {
+      throw new Error(`Incomplete Phasekit state: .planning/${fileName} is missing.`);
     }
 
     throw error;

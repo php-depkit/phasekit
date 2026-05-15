@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, unlink } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -84,6 +84,16 @@ describe("status and next action", () => {
       current_run_id: null,
       current_stage: null,
     });
+  });
+
+  test("rejects incomplete initialized state instead of reporting clean", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+    await unlink(join(rootDir, ".planning", "phases.json"));
+
+    await expect(getStatus({ rootDir })).rejects.toThrow(
+      "Incomplete Phasekit state: .planning/phases.json is missing.",
+    );
   });
 
   test("reports an ingested project ready to start a run", async () => {
