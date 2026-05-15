@@ -22,6 +22,20 @@ export {
 } from "./config/schema";
 export type { PhasekitConfig, PhasekitConfigOverride } from "./config/schema";
 export {
+  allowedRunStageTransitions,
+  getAllowedNextRunStages,
+  runBlockerSchema,
+  runStageSchema,
+  runStages,
+  validateRunStageTransition,
+} from "./runs/lifecycle";
+export type {
+  RunBlocker,
+  RunStage,
+  RunStageTransition,
+  RunStageTransitionInput,
+} from "./runs/lifecycle";
+export {
   defaultPhasesState,
   defaultProjectState,
   defaultRequirementsState,
@@ -52,7 +66,6 @@ export {
   requirementsStateSchema,
   ruleSchema,
   rulesStateSchema,
-  runBlockerSchema,
   runStageTransitionSchema,
   runStateSchema,
   runTaskSchema,

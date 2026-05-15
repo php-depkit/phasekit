@@ -1,5 +1,13 @@
 import { z } from "zod";
 
+import {
+  runBlockerSchema,
+  runStageSchema,
+  validateRunStageTransition,
+} from "../runs/lifecycle";
+
+export { runBlockerSchema, runStageSchema } from "../runs/lifecycle";
+
 export const sourceReferenceSchema = z
   .object({
     path: z.string().min(1),
@@ -76,27 +84,31 @@ export const runTaskSchema = z
   })
   .strict();
 
-export const runBlockerSchema = z
-  .object({
-    reason: z.string().min(1),
-    at: z.string().datetime().optional(),
-  })
-  .strict();
-
 export const runStageTransitionSchema = z
   .object({
-    from: z.string().min(1),
-    to: z.string().min(1),
+    from: runStageSchema,
+    to: runStageSchema,
     at: z.string().datetime(),
   })
-  .strict();
+  .strict()
+  .superRefine((transition, context) => {
+    try {
+      validateRunStageTransition(transition);
+    } catch (error) {
+      context.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["to"],
+        message: error instanceof Error ? error.message : "Invalid run stage transition.",
+      });
+    }
+  });
 
 export const runStateSchema = z
   .object({
     id: z.string().min(1),
     current_phase: z.string().min(1),
     current_plan: z.string().min(1).optional(),
-    current_stage: z.string().min(1),
+    current_stage: runStageSchema,
     claimed_tasks: z.array(runTaskSchema),
     completed_checks: z.array(z.string().min(1)),
     changed_files: z.array(z.string().min(1)),

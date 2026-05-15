@@ -121,6 +121,7 @@ describe("state schemas", () => {
         blockers: [
           {
             reason: "Need clarification on auth policy.",
+            next_step: "Ask the user which auth policy applies.",
             at: "2026-05-15T00:01:00.000Z",
           },
         ],
@@ -148,6 +149,7 @@ describe("state schemas", () => {
       blockers: [
         {
           reason: "Need clarification on auth policy.",
+          next_step: "Ask the user which auth policy applies.",
           at: "2026-05-15T00:01:00.000Z",
         },
       ],
