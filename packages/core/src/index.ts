@@ -22,6 +22,13 @@ export {
 } from "./config/schema";
 export type { PhasekitConfig, PhasekitConfigOverride } from "./config/schema";
 export {
+  expandIngestPaths,
+} from "./ingest/paths";
+export type {
+  ExpandIngestPathsOptions,
+  IngestTextInput,
+} from "./ingest/paths";
+export {
   allowedRunStageTransitions,
   getAllowedNextRunStages,
   runBlockerSchema,
