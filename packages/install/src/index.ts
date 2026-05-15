@@ -7,7 +7,7 @@ export const installPackageName = "@phasekit/install" as const;
 const commandManagedMarker = "<!-- phasekit:managed opencode-command v1 -->";
 const agentManagedMarker = "<!-- phasekit:managed opencode-agent v1 -->";
 
-export type OpenCodeCommandName = "pk-init" | "pk-status" | "pk-next" | "pk-config";
+export type OpenCodeCommandName = "pk-init" | "pk-status" | "pk-next" | "pk-config" | "pk-ingest";
 export type OpenCodeAgentName =
   | "orchestrator"
   | "context-scout"
@@ -161,6 +161,14 @@ const commandTemplates: CommandTemplate[] = [
     body: [
       "Call the `phasekit_get_status` tool for the current workspace root, then call `phasekit_next_action` only if more guidance is needed.",
       "Report the tool results without reading, merging, or rewriting configuration in this command markdown.",
+    ],
+  },
+  {
+    name: "pk-ingest",
+    description: "Ingest one or more product input paths through Phasekit.",
+    body: [
+      "Call the `phasekit_ingest_paths` tool for the current workspace root with the user-provided paths as `inputPaths`.",
+      "Return the tool result directly and do not expand paths, extract requirements, or write `.planning` state from this command markdown.",
     ],
   },
 ];

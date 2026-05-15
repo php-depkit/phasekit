@@ -1,11 +1,14 @@
 import { tool, type Plugin, type ToolDefinition, type ToolResult } from "@opencode-ai/plugin";
 import {
   describeCorePackage,
+  expandIngestPaths,
   getStatus,
   initializePlanningState,
+  type ExpandIngestPathsOptions,
   type GetStatusOptions,
   type InitializePlanningStateOptions,
   type InitializePlanningStateResult,
+  type IngestTextInput,
   type NextAction,
   type PhasekitStatus,
 } from "@phasekit/core";
@@ -35,6 +38,7 @@ export type PhasekitToolContext = {
 export type InitProjectInput = PhasekitToolContext & InitializePlanningStateOptions;
 export type StatusInput = PhasekitToolContext & Pick<GetStatusOptions, "runId">;
 export type NextActionInput = StatusInput;
+export type IngestPathsInput = PhasekitToolContext & Pick<ExpandIngestPathsOptions, "inputPaths">;
 export type AdvanceInput = PhasekitToolContext & {
   runId: string;
   targetStage: string;
@@ -48,6 +52,7 @@ export type PhasekitToolHandlers = {
   phasekit_init_project(input?: InitProjectInput): Promise<PhasekitToolResult<InitializePlanningStateResult>>;
   phasekit_get_status(input?: StatusInput): Promise<PhasekitToolResult<PhasekitStatus>>;
   phasekit_next_action(input?: NextActionInput): Promise<PhasekitToolResult<NextAction>>;
+  phasekit_ingest_paths(input: IngestPathsInput): Promise<PhasekitToolResult<IngestTextInput[]>>;
   phasekit_advance(input: AdvanceInput): Promise<PhasekitToolResult<never>>;
   phasekit_write_artifact(input: WriteArtifactInput): Promise<PhasekitToolResult<never>>;
 };
@@ -78,6 +83,9 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
       const status = await getStatus({ rootDir: resolveRootDir(input, defaultContext), runId: input.runId });
 
       return status.next_action;
+    }),
+    phasekit_ingest_paths: (input) => runTool(async () => {
+      return expandIngestPaths({ rootDir: resolveRootDir(input, defaultContext), inputPaths: input.inputPaths });
     }),
     phasekit_advance: () => notImplementedTool("phasekit_advance", "Run advancement is implemented in a later Phasekit phase."),
     phasekit_write_artifact: () => notImplementedTool(
@@ -129,6 +137,21 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
         return toOpenCodeToolResult(
           "Phasekit next action",
           await handlers.phasekit_next_action({ rootDir: args.rootDir, runId: args.runId }),
+        );
+      },
+    }),
+    phasekit_ingest_paths: tool({
+      description: "Expand Phasekit ingest input paths through core ingest behavior.",
+      args: {
+        rootDir: schema.string().optional(),
+        inputPaths: schema.array(schema.string()),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult(
+          "Phasekit ingest paths",
+          await handlers.phasekit_ingest_paths({ rootDir: args.rootDir, inputPaths: args.inputPaths }),
         );
       },
     }),

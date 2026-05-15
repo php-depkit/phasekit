@@ -45,6 +45,7 @@ describe("@phasekit/install", () => {
         join(commandsDir, "pk-status.md"),
         join(commandsDir, "pk-next.md"),
         join(commandsDir, "pk-config.md"),
+        join(commandsDir, "pk-ingest.md"),
       ]);
     });
   });
@@ -56,6 +57,7 @@ describe("@phasekit/install", () => {
         join(homeDir, ".config", "opencode", "commands", "pk-status.md"),
         join(homeDir, ".config", "opencode", "commands", "pk-next.md"),
         join(homeDir, ".config", "opencode", "commands", "pk-config.md"),
+        join(homeDir, ".config", "opencode", "commands", "pk-ingest.md"),
       ]);
     });
   });
@@ -65,12 +67,38 @@ describe("@phasekit/install", () => {
       const result = await installOpenCodeCommandArtifacts({ configRoot });
 
       expect(result.commandsDir).toBe(join(configRoot, "opencode", "commands"));
-      expect(result.artifacts.map((artifact) => artifact.name)).toEqual(["pk-init", "pk-status", "pk-next", "pk-config"]);
+      expect(result.artifacts.map((artifact) => artifact.name)).toEqual([
+        "pk-init",
+        "pk-status",
+        "pk-next",
+        "pk-config",
+        "pk-ingest",
+      ]);
 
       await expectCommandContent(configRoot, "pk-init", "phasekit_init_project");
       await expectCommandContent(configRoot, "pk-status", "phasekit_get_status");
       await expectCommandContent(configRoot, "pk-next", "phasekit_next_action");
       await expectCommandContent(configRoot, "pk-config", "phasekit_get_status");
+      await expectCommandContent(configRoot, "pk-ingest", "phasekit_ingest_paths");
+    });
+  });
+
+  test("generates a thin pk-ingest command wrapper", async () => {
+    await withTempDir(async (configRoot) => {
+      const artifact = generateOpenCodeCommandArtifacts({ configRoot }).find(({ name }) => name === "pk-ingest");
+
+      if (artifact === undefined) {
+        throw new Error("Missing pk-ingest generated artifact.");
+      }
+
+      expect(artifact.path).toBe(join(configRoot, "opencode", "commands", "pk-ingest.md"));
+      expect(artifact.content).toContain("# /pk-ingest");
+      expect(artifact.content).toContain("phasekit_ingest_paths");
+      expect(artifact.content).toContain("inputPaths");
+      expect(artifact.content).toContain("user-provided paths");
+      expect(artifact.content).not.toContain("expandIngestPaths");
+      expect(artifact.content).not.toContain("extractSourceRequirements");
+      expect(artifact.content).not.toContain("/phasekit:ingest");
     });
   });
 

@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
@@ -20,6 +20,12 @@ async function withTempDir<T>(run: (rootDir: string) => Promise<T>): Promise<T> 
   } finally {
     await rm(rootDir, { recursive: true, force: true });
   }
+}
+
+async function writeTextFile(rootDir: string, relativePath: string, text: string): Promise<void> {
+  const filePath = join(rootDir, ...relativePath.split("/"));
+  await mkdir(join(filePath, ".."), { recursive: true });
+  await writeFile(filePath, text, "utf8");
 }
 
 function createToolContext(rootDir: string) {
@@ -101,6 +107,42 @@ describe("@phasekit/opencode", () => {
     });
   });
 
+  test("ingests multiple paths through core ingest behavior", async () => {
+    await withTempDir(async (rootDir) => {
+      await writeTextFile(rootDir, "docs/zeta.md", "Zeta\n");
+      await writeTextFile(rootDir, "docs/alpha.txt", "Alpha\n");
+      await writeTextFile(rootDir, "README.md", "Read me\n");
+
+      const tools = createPhasekitToolHandlers({ rootDir });
+      const result = await tools.phasekit_ingest_paths({ inputPaths: ["docs/zeta.md", "README.md", "docs"] });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.data.map((input) => input.relativePath)).toEqual(["README.md", "docs/alpha.txt", "docs/zeta.md"]);
+      expect(result.data.map((input) => input.text)).toEqual(["Read me\n", "Alpha\n", "Zeta\n"]);
+    });
+  });
+
+  test("converts ingest failures into structured actionable errors", async () => {
+    await withTempDir(async (rootDir) => {
+      await writeTextFile(rootDir, "docs/page.html", "<h1>Unsupported</h1>\n");
+
+      const tools = createPhasekitToolHandlers({ rootDir });
+      const result = await tools.phasekit_ingest_paths({ inputPaths: ["docs/page.html"] });
+
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: "PHASEKIT_TOOL_ERROR",
+          message: "Unsupported ingest input docs/page.html: only .md, .markdown, and .txt files are supported in this phase.",
+        },
+      });
+    });
+  });
+
   test("keeps future tools structured without duplicating unavailable core behavior", async () => {
     const tools = createPhasekitToolHandlers();
 
@@ -124,6 +166,7 @@ describe("@phasekit/opencode", () => {
     expect(Object.keys(createPhasekitToolHandlers()).sort()).toEqual([
       "phasekit_advance",
       "phasekit_get_status",
+      "phasekit_ingest_paths",
       "phasekit_init_project",
       "phasekit_next_action",
       "phasekit_write_artifact",
@@ -136,6 +179,7 @@ describe("@phasekit/opencode", () => {
     expect(Object.keys(tools).sort()).toEqual([
       "phasekit_advance",
       "phasekit_get_status",
+      "phasekit_ingest_paths",
       "phasekit_init_project",
       "phasekit_next_action",
       "phasekit_write_artifact",
@@ -153,6 +197,8 @@ describe("@phasekit/opencode", () => {
 
       const init = await tools.phasekit_init_project.execute({}, context);
       const status = await tools.phasekit_get_status.execute({}, context);
+      await writeTextFile(rootDir, "docs/prd.md", "Requirement\n");
+      const ingest = await tools.phasekit_ingest_paths.execute({ inputPaths: ["docs/prd.md"] }, context);
 
       expect(parseToolOutput(init)).toMatchObject({ ok: true });
       expect(parseToolOutput(status)).toMatchObject({
@@ -161,6 +207,10 @@ describe("@phasekit/opencode", () => {
           project: { initialized: true },
           next_action: { kind: "ingest_project" },
         },
+      });
+      expect(parseToolOutput(ingest)).toMatchObject({
+        ok: true,
+        data: [{ relativePath: "docs/prd.md", text: "Requirement\n" }],
       });
     });
   });
@@ -176,6 +226,7 @@ describe("@phasekit/opencode", () => {
       expect(Object.keys(hooks.tool ?? {}).sort()).toEqual([
         "phasekit_advance",
         "phasekit_get_status",
+        "phasekit_ingest_paths",
         "phasekit_init_project",
         "phasekit_next_action",
         "phasekit_write_artifact",
