@@ -1,0 +1,32 @@
+version: 1
+last_run: '1778801813'
+skills:
+  https://github.com/jeffallan/claude-skills::code-documenter:
+    destination: /Users/aaronflorey/Code/phasekit/.opencode/skills/code-documenter
+    hash: 3f29c96402e3d6387e366f7e6d75d756635b0d33cdd123c198a8dc7d1fcfcc10
+    skill: code-documenter
+    description: Generates, formats, and validates technical documentation — including docstrings, OpenAPI/Swagger specs, JSDoc annotations, doc portals, and user guides. Use when adding docstrings to functions or classes, creating API documentation, building documentation sites, or writing tutorials and user guides. Invoke for OpenAPI/Swagger specs, JSDoc, doc portals, getting started guides.
+    source: https://github.com/jeffallan/claude-skills
+    source_revision: branch:main
+    updated_at: '1778801710'
+    scope: project
+  https://github.com/jeffallan/claude-skills::typescript-pro:
+    destination: /Users/aaronflorey/Code/phasekit/.opencode/skills/typescript-pro
+    hash: 22eb8c500e6029fede1b430a0657f1aa7ca69afb73f9a552def55ee0b3ad64fd
+    skill: typescript-pro
+    description: Implements advanced TypeScript type systems, creates custom type guards, utility types, and branded types, and configures tRPC for end-to-end type safety. Use when building TypeScript applications requiring advanced generics, conditional or mapped types, discriminated unions, monorepo setup, or full-stack type safety with tRPC.
+    source: https://github.com/jeffallan/claude-skills
+    source_revision: branch:main
+    updated_at: '1778801710'
+    scope: project
+  https://github.com/sickn33/antigravity-awesome-skills::clean-code:
+    destination: /Users/aaronflorey/Code/phasekit/.opencode/skills/clean-code
+    hash: c5825232bbb81729cd1e198ed3fc0d031763d3c9da6f32c9ba0fcefada487cf5
+    skill: clean-code
+    description: '"This skill embodies the principles of \"Clean Code\" by Robert C. Martin (Uncle Bob). Use it to transform \"code that works\" into \"code that is clean.\""'
+    source: https://github.com/sickn33/antigravity-awesome-skills
+    source_revision: branch:main
+    updated_at: '1778801708'
+    scope: project
+assets: {}
+latest_report: '{"run_id":"1778801813","config":"/Users/aaronflorey/Code/phasekit/kasetto.yaml","destination":"/Users/aaronflorey/Code/phasekit/.opencode/skills","dry_run":false,"summary":{"installed":0,"updated":0,"removed":0,"unchanged":3,"broken":1,"failed":0},"actions":[{"source":"https://github.com/sickn33/antigravity-awesome-skills","skill":"clean-code","status":"unchanged","error":null},{"source":"https://github.com/jeffallan/claude-skills","skill":"typescript-pro","status":"unchanged","error":null},{"source":"https://github.com/jeffallan/claude-skills","skill":"code-documenter","status":"unchanged","error":null},{"source":"https://github.com/igorwarzocha/opencode-workflows","skill":"create-opencode-plugin","status":"broken","error":"skill not found: create-opencode-plugin"}]}'

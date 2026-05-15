@@ -1,0 +1,17 @@
+references
+
+node_modules/
+dist/
+coverage/
+*.tsbuildinfo
+
+.planning/cache/
+.planning/**/*.sqlite
+.planning/**/*.sqlite-*
+.planning/runs/
+.planning/verifications/
+
+.DS_Store
+/.opencode/skills
+/.planning
+/.pupignore
