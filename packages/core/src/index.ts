@@ -8,12 +8,19 @@ export {
   defaultConfig,
 } from "./config/defaults";
 export {
+  loadPhasekitConfig,
+} from "./config/loader";
+export type {
+  LoadPhasekitConfigOptions,
+} from "./config/loader";
+export {
   commitModeSchema,
+  phasekitConfigOverrideSchema,
   phasekitConfigSchema,
   reviewPolicySchema,
   verifyPolicySchema,
 } from "./config/schema";
-export type { PhasekitConfig } from "./config/schema";
+export type { PhasekitConfig, PhasekitConfigOverride } from "./config/schema";
 export {
   defaultPhasesState,
   defaultProjectState,

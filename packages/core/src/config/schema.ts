@@ -41,4 +41,44 @@ export const phasekitConfigSchema = z
   })
   .strict();
 
+export const phasekitConfigOverrideSchema = z
+  .object({
+    commit: z
+      .object({
+        mode: commitModeSchema.optional(),
+        planning_commits: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    quality: z
+      .object({
+        review: reviewPolicySchema.optional(),
+        verify: verifyPolicySchema.optional(),
+      })
+      .strict()
+      .optional(),
+    greenfield: z
+      .object({
+        recommend_stack: z.boolean().optional(),
+        ask_before_locking_stack: z.boolean().optional(),
+      })
+      .strict()
+      .optional(),
+    models: z
+      .object({
+        orchestrator: z.string().min(1).optional(),
+        context_scout: z.string().min(1).optional(),
+        prd_ingestor: z.string().min(1).optional(),
+        grill_me: z.string().min(1).optional(),
+        planner: z.string().min(1).optional(),
+        executor: z.string().min(1).optional(),
+        reviewer: z.string().min(1).optional(),
+        verifier: z.string().min(1).optional(),
+      })
+      .strict()
+      .optional(),
+  })
+  .strict();
+
 export type PhasekitConfig = z.infer<typeof phasekitConfigSchema>;
+export type PhasekitConfigOverride = z.infer<typeof phasekitConfigOverrideSchema>;
