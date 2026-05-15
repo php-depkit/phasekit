@@ -14,7 +14,7 @@ function sortJsonValue(value: unknown): unknown {
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value)
-        .sort(([leftKey], [rightKey]) => leftKey.localeCompare(rightKey))
+        .sort(([leftKey], [rightKey]) => (leftKey < rightKey ? -1 : leftKey > rightKey ? 1 : 0))
         .map(([key, entryValue]) => [key, sortJsonValue(entryValue)]),
     );
   }

@@ -7,7 +7,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import {
   defaultConfig,
   initializePlanningState,
-  phasekitConfigSchema,
+  loadPhasekitConfig,
+  phasekitConfigOverrideSchema,
   projectStateSchema,
   readJsonFile,
   toDeterministicJson,
@@ -108,7 +109,15 @@ describe("planning state initialization", () => {
       ".planning/verifications",
     ]);
     expect(result.existingPaths).toEqual([]);
-    expect(await readJsonFile(join(rootDir, ".planning", "config.json"), phasekitConfigSchema)).toEqual(
+    expect(
+      await readJsonFile(join(rootDir, ".planning", "config.json"), phasekitConfigOverrideSchema),
+    ).toEqual({});
+    expect(
+      await loadPhasekitConfig({
+        projectRoot: rootDir,
+        globalConfigPath: join(rootDir, "missing-global-config.json"),
+      }),
+    ).toEqual(
       defaultConfig,
     );
     await expect(stat(join(rootDir, ".planning", "cache"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -147,5 +156,25 @@ describe("planning state initialization", () => {
       stack: "Existing Stack",
     });
     expect(await readFile(join(planningDir, "notes.md"), "utf8")).toBe("leave me alone\n");
+  });
+
+  test("initializes project config as overrides so global config remains effective", async () => {
+    const rootDir = await createTempDirectory();
+    const globalConfigPath = join(rootDir, "global-config.json");
+
+    await initializePlanningState(rootDir);
+    await writeJsonFile(globalConfigPath, {
+      greenfield: {
+        recommend_stack: false,
+      },
+    });
+
+    await expect(loadPhasekitConfig({ projectRoot: rootDir, globalConfigPath })).resolves.toEqual({
+      ...defaultConfig,
+      greenfield: {
+        ...defaultConfig.greenfield,
+        recommend_stack: false,
+      },
+    });
   });
 });

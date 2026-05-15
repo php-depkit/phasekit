@@ -1,8 +1,7 @@
 import { mkdir, stat } from "node:fs/promises";
 import { join, relative } from "node:path";
 
-import { defaultConfig } from "../config/defaults";
-import type { PhasekitConfig } from "../config/schema";
+import type { PhasekitConfigOverride } from "../config/schema";
 import {
   defaultPhasesState,
   defaultProjectState,
@@ -18,7 +17,7 @@ type PlanningEntry = {
 };
 
 export type InitializePlanningStateOptions = {
-  config?: PhasekitConfig;
+  config?: PhasekitConfigOverride;
 };
 
 export type InitializePlanningStateResult = {
@@ -92,7 +91,7 @@ export async function initializePlanningState(
   const entries: PlanningEntry[] = [
     { path: planningDir, kind: "directory" },
     { path: join(planningDir, "project.json"), kind: "file", value: defaultProjectState },
-    { path: join(planningDir, "config.json"), kind: "file", value: options.config ?? defaultConfig },
+    { path: join(planningDir, "config.json"), kind: "file", value: options.config ?? {} },
     {
       path: join(planningDir, "requirements.json"),
       kind: "file",
