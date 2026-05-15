@@ -5,13 +5,9 @@ dist/
 coverage/
 *.tsbuildinfo
 
-.planning/cache/
-.planning/**/*.sqlite
-.planning/**/*.sqlite-*
-.planning/runs/
-.planning/verifications/
+.planning
 
 .DS_Store
-/.opencode/skills
+/.opencode
 /.planning
 /.pupignore
