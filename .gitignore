@@ -4,9 +4,6 @@ node_modules/
 dist/
 coverage/
 *.tsbuildinfo
-
-.planning
-
 .DS_Store
 /.opencode
 /.planning
