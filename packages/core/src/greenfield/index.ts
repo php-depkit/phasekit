@@ -1,7 +1,7 @@
 import { join } from "node:path";
 
 import type { PhasekitConfig } from "../config/schema";
-import type { GrillMeQuestion } from "../planning/slices";
+import type { GrillMeQuestion, GrillMeQuestionAnswer } from "../planning/slices";
 import type { ProjectState } from "../state/schema";
 import { readJsonFile, writeJsonFile } from "../state/json";
 import { projectStateSchema } from "../state/schema";
@@ -64,6 +64,17 @@ export type StackDecision =
 export type ConfirmedStackDecision = Extract<StackDecision, { kind: "confirmed" }>;
 export type StackDecisionBlocker = Extract<StackDecision, { kind: "blocker" }>;
 
+export interface ConfirmedStackContext {
+  confirmed_stack?: string;
+}
+
+export interface ConfirmedStackContextBundle {
+  ingest: ConfirmedStackContext;
+  planning: ConfirmedStackContext;
+  docs: ConfirmedStackContext;
+  verification: ConfirmedStackContext;
+}
+
 export function detectGreenfieldProject(options: DetectGreenfieldProjectOptions = {}): GreenfieldDetection {
   if (hasText(options.project?.stack)) {
     return { isGreenfield: false, reason: "confirmed-stack" };
@@ -125,23 +136,57 @@ export function decideStack(options: DecideStackOptions): StackDecision {
   return {
     kind: "question",
     recommendedStack,
-    question: {
-      id: "greenfield-stack",
-      requirement_ids: ["greenfield-stack"],
-      prompt: "Which tech stack should Phasekit use for this greenfield project?",
-      options: [
-        {
-          id: "approve-recommended-stack",
-          text: recommendedStack,
-          recommended: true,
-        },
-      ],
-      custom_answer: {
-        enabled: true,
-        label: "Use a different stack",
+    question: createStackQuestion(recommendedStack),
+  };
+}
+
+export function createStackQuestion(recommendedStack: string): GrillMeQuestion {
+  if (!hasText(recommendedStack)) {
+    throw new Error("Recommended stack must not be empty.");
+  }
+
+  const stack = recommendedStack.trim();
+
+  return {
+    id: "greenfield-stack",
+    requirement_ids: ["greenfield-stack"],
+    prompt: "Which tech stack should Phasekit use for this greenfield project?",
+    options: [
+      {
+        id: "approve-recommended-stack",
+        text: stack,
+        recommended: true,
       },
+      {
+        id: "edit-recommended-stack",
+        text: "Edit the recommended stack before confirming",
+        recommended: false,
+      },
+      {
+        id: "use-different-stack",
+        text: "Use a different stack",
+        recommended: false,
+      },
+    ],
+    custom_answer: {
+      enabled: true,
+      label: "Enter the stack to confirm",
     },
   };
+}
+
+export function confirmStackQuestionAnswer(answer: GrillMeQuestionAnswer): ConfirmedStackDecision | StackDecisionBlocker {
+  if (answer.selected_recommended_option !== undefined && answer.selected_recommended_option.id !== "approve-recommended-stack") {
+    return {
+      kind: "blocker",
+      reason: `Stack question option ${answer.selected_recommended_option.id} requires a custom stack answer before confirmation.`,
+      next_step: "Ask the user to provide the exact stack to confirm.",
+    };
+  }
+
+  const stack = answer.selected_recommended_option?.text ?? answer.custom_answer_text;
+
+  return confirmStackDecision(stack ?? "", "answer");
 }
 
 export function confirmStackDecision(
@@ -183,6 +228,17 @@ export async function writeConfirmedProjectStack(rootDir: string, stack: string)
   await writeJsonFile(projectPath, nextProject);
 
   return nextProject;
+}
+
+export function createConfirmedStackContexts(project: ProjectState): ConfirmedStackContextBundle {
+  const context = hasText(project.stack) ? { confirmed_stack: project.stack.trim() } : {};
+
+  return {
+    ingest: { ...context },
+    planning: { ...context },
+    docs: { ...context },
+    verification: { ...context },
+  };
 }
 
 function normalizeStackDeclarations(declarations: readonly StackDeclaration[]): StackDeclaration[] {

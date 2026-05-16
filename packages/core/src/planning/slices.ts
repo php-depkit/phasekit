@@ -3,6 +3,7 @@ import type { PhaseStatus, PhasesState, Requirement } from "../state/schema";
 export interface CodebaseContextScoutInput {
   rootPath: string;
   requirementIds: readonly string[];
+  confirmed_stack?: string;
 }
 
 export interface CodebaseContextScoutResult {
@@ -76,6 +77,7 @@ export interface SliceSourceRequirementsInput {
   requirements: readonly Requirement[];
   context: CodebaseContextScoutResult;
   answeredQuestions: readonly GrillMeQuestionAnswer[];
+  confirmed_stack?: string;
 }
 
 export type PhaseSlicer = (

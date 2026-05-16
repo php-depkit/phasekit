@@ -22,12 +22,17 @@ export {
 } from "./config/schema";
 export type { PhasekitConfig, PhasekitConfigOverride } from "./config/schema";
 export {
+  confirmStackQuestionAnswer,
   confirmStackDecision,
+  createConfirmedStackContexts,
+  createStackQuestion,
   decideStack,
   detectGreenfieldProject,
   writeConfirmedProjectStack,
 } from "./greenfield/index";
 export type {
+  ConfirmedStackContext,
+  ConfirmedStackContextBundle,
   ConfirmedStackDecision,
   DecideStackOptions,
   DetectGreenfieldProjectOptions,
@@ -51,6 +56,7 @@ export {
 export type {
   AssignRequirementIdsOptions,
   ExtractSourceRequirementsOptions,
+  IngestContext,
   RequirementExtractor,
   SourceRequirementCandidate,
   SourceRequirementSource,

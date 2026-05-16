@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
 
 import {
+  confirmStackQuestionAnswer,
+  createConfirmedStackContexts,
   decideStack,
   detectGreenfieldProject,
   initializePlanningState,
@@ -162,10 +164,20 @@ describe("greenfield detection", () => {
             text: "Bun + TypeScript + SQLite",
             recommended: true,
           },
+          {
+            id: "edit-recommended-stack",
+            text: "Edit the recommended stack before confirming",
+            recommended: false,
+          },
+          {
+            id: "use-different-stack",
+            text: "Use a different stack",
+            recommended: false,
+          },
         ],
         custom_answer: {
           enabled: true,
-          label: "Use a different stack",
+          label: "Enter the stack to confirm",
         },
       },
     });
@@ -181,6 +193,107 @@ describe("greenfield detection", () => {
       kind: "blocker",
       reason: "Stack recommendation is enabled, but no recommended stack was provided.",
       next_step: "Provide an explicit recommended stack or disable greenfield stack recommendation.",
+    });
+  });
+});
+
+describe("stack confirmation payloads", () => {
+  test("confirms the recommended option without silently accepting it before an answer", () => {
+    const decision = decideStack({
+      repository: { implementationFiles: [], stackDeclarations: [] },
+      greenfield: recommendStack,
+      recommendedStack: "Bun + TypeScript",
+    });
+
+    expect(decision.kind).toBe("question");
+
+    if (decision.kind !== "question") {
+      throw new Error("Expected a stack question decision.");
+    }
+
+    expect(decision.question.options.filter((option) => option.recommended)).toEqual([
+      {
+        id: "approve-recommended-stack",
+        text: "Bun + TypeScript",
+        recommended: true,
+      },
+    ]);
+
+    expect(
+      confirmStackQuestionAnswer({
+        question: {
+          id: decision.question.id,
+          prompt: decision.question.prompt,
+        },
+        requirement_ids: decision.question.requirement_ids,
+        selected_recommended_option: {
+          id: "approve-recommended-stack",
+          text: "Bun + TypeScript",
+        },
+      }),
+    ).toEqual({
+      kind: "confirmed",
+      stack: "Bun + TypeScript",
+      project: { stack: "Bun + TypeScript" },
+      source: "answer",
+    });
+  });
+
+  test("confirms custom stack answers", () => {
+    expect(
+      confirmStackQuestionAnswer({
+        question: {
+          id: "greenfield-stack",
+          prompt: "Which tech stack should Phasekit use for this greenfield project?",
+        },
+        requirement_ids: ["greenfield-stack"],
+        custom_answer_text: "SvelteKit + TypeScript",
+      }),
+    ).toEqual({
+      kind: "confirmed",
+      stack: "SvelteKit + TypeScript",
+      project: { stack: "SvelteKit + TypeScript" },
+      source: "answer",
+    });
+  });
+
+  test("does not confirm edit or different-stack choices without custom stack text", () => {
+    for (const option of ["edit-recommended-stack", "use-different-stack"]) {
+      expect(
+        confirmStackQuestionAnswer({
+          question: {
+            id: "greenfield-stack",
+            prompt: "Which tech stack should Phasekit use for this greenfield project?",
+          },
+          requirement_ids: ["greenfield-stack"],
+          selected_recommended_option: {
+            id: option,
+            text: "Use a different stack",
+          },
+        }),
+      ).toEqual({
+        kind: "blocker",
+        reason: `Stack question option ${option} requires a custom stack answer before confirmation.`,
+        next_step: "Ask the user to provide the exact stack to confirm.",
+      });
+    }
+  });
+
+  test("propagates confirmed stack into downstream contexts", () => {
+    expect(createConfirmedStackContexts({ stack: "Bun + TypeScript" })).toEqual({
+      ingest: { confirmed_stack: "Bun + TypeScript" },
+      planning: { confirmed_stack: "Bun + TypeScript" },
+      docs: { confirmed_stack: "Bun + TypeScript" },
+      verification: { confirmed_stack: "Bun + TypeScript" },
+    });
+  });
+
+  test("does not propagate a stack when none is confirmed", () => {
+    expect(createConfirmedStackContexts({})).toEqual({
+      ingest: {},
+      planning: {},
+      docs: {},
+      verification: {},
     });
   });
 });

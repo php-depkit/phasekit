@@ -23,14 +23,20 @@ interface RequirementIdentityInput {
   sources: readonly SourceReference[];
 }
 
+export interface IngestContext {
+  confirmed_stack?: string;
+}
+
 export type RequirementExtractor = (
   inputs: readonly IngestTextInput[],
+  context: IngestContext,
 ) => SourceRequirementCandidate[] | Promise<SourceRequirementCandidate[]>;
 
 export interface ExtractSourceRequirementsOptions {
   inputs: readonly IngestTextInput[];
   extractor: RequirementExtractor;
   existingState?: RequirementsState;
+  context?: IngestContext;
 }
 
 export interface AssignRequirementIdsOptions {
@@ -41,7 +47,7 @@ export interface AssignRequirementIdsOptions {
 export async function extractSourceRequirements(
   options: ExtractSourceRequirementsOptions,
 ): Promise<RequirementsState> {
-  const candidates = await options.extractor(options.inputs);
+  const candidates = await options.extractor(options.inputs, options.context ?? {});
 
   return assignSourceRequirementIds({
     candidates,

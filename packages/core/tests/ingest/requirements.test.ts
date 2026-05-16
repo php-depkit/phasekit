@@ -126,6 +126,22 @@ describe("source requirement ID assignment", () => {
     ]);
   });
 
+  test("passes confirmed stack context to requirement extraction", async () => {
+    const state = await extractSourceRequirements({
+      inputs,
+      context: { confirmed_stack: "Bun + TypeScript" },
+      extractor: (_receivedInputs, context) => [candidate(`Use ${context.confirmed_stack ?? "missing stack"}.`, "line:1")],
+    });
+
+    expect(state.requirements).toEqual([
+      {
+        id: "REQ-1",
+        text: "Use Bun + TypeScript.",
+        sources: [{ path: "docs/prd.md", locator: "line:1" }],
+      },
+    ]);
+  });
+
   test("requires source locators for traceable requirement mappings", () => {
     expect(() =>
       assignSourceRequirementIds({
