@@ -36,6 +36,12 @@ function mergeConfig(base: PhasekitConfig, override: PhasekitConfigOverride): Ph
       ...base.models,
       ...override.models,
     },
+    verification: {
+      commands: {
+        ...base.verification.commands,
+        ...override.verification?.commands,
+      },
+    },
   };
 }
 

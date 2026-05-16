@@ -18,9 +18,18 @@ export {
   phasekitConfigOverrideSchema,
   phasekitConfigSchema,
   reviewPolicySchema,
+  verificationCommandConfigSchema,
+  verificationCommandKindSchema,
+  verificationConfigSchema,
   verifyPolicySchema,
 } from "./config/schema";
-export type { PhasekitConfig, PhasekitConfigOverride } from "./config/schema";
+export type {
+  PhasekitConfig,
+  PhasekitConfigOverride,
+  VerificationCommandConfig,
+  VerificationCommandKind,
+  VerificationConfig,
+} from "./config/schema";
 export {
   confirmStackQuestionAnswer,
   confirmStackDecision,
@@ -156,6 +165,17 @@ export type {
   StatusRunState,
   StatusStateInput,
 } from "./status/index";
+export {
+  discoverVerificationCommands,
+  verificationCommandKinds,
+} from "./verify/commands";
+export type {
+  DiscoverVerificationCommandsOptions,
+  PackageManager,
+  PackageMetadataInput,
+  VerificationCommand,
+  VerificationCommandSource,
+} from "./verify/commands";
 export {
   defaultPhasesState,
   defaultProjectState,

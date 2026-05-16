@@ -23,4 +23,7 @@ export const defaultConfig: PhasekitConfig = {
     reviewer: "anthropic/claude-sonnet-4.5",
     verifier: "anthropic/claude-opus-4.5",
   },
+  verification: {
+    commands: {},
+  },
 };

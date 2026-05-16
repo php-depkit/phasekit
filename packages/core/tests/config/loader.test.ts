@@ -51,6 +51,13 @@ describe("config loader", () => {
       greenfield: {
         recommend_stack: false,
       },
+      verification: {
+        commands: {
+          test: {
+            command: "bun test",
+          },
+        },
+      },
     });
     await writeJsonFile(projectConfigPath, {
       commit: {
@@ -85,6 +92,13 @@ describe("config loader", () => {
       models: {
         ...defaultConfig.models,
         reviewer: "cli-reviewer",
+      },
+      verification: {
+        commands: {
+          test: {
+            command: "bun test",
+          },
+        },
       },
     });
   });
