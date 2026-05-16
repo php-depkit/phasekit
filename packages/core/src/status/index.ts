@@ -3,6 +3,7 @@ import { join } from "node:path";
 import type { ZodType } from "zod";
 
 import { getAllowedNextRunStages } from "../runs/lifecycle";
+import { readRunState } from "../runs/persistence";
 import {
   defaultPhasesState,
   defaultProjectState,
@@ -13,7 +14,6 @@ import {
   phasesStateSchema,
   projectStateSchema,
   requirementsStateSchema,
-  runStateSchema,
   type PhasesState,
   type ProjectState,
   type RequirementsState,
@@ -123,7 +123,7 @@ async function readOptionalPlanningState(rootDir: string, runId?: string): Promi
   const [requirements, phases, runs] = await Promise.all([
     readRequiredPlanningFile(planningDir, "requirements.json", requirementsStateSchema),
     readRequiredPlanningFile(planningDir, "phases.json", phasesStateSchema),
-    readRuns(planningDir, runId),
+    readRuns(rootDir, planningDir, runId),
   ]);
 
   return { initialized: true, project, requirements, phases, runs };
@@ -141,12 +141,12 @@ async function readRequiredPlanningFile<T>(planningDir: string, fileName: string
   }
 }
 
-async function readRuns(planningDir: string, runId?: string): Promise<RunState[]> {
+async function readRuns(rootDir: string, planningDir: string, runId?: string): Promise<RunState[]> {
   const runsDir = join(planningDir, "runs");
 
   if (runId) {
     try {
-      return [await readJsonFile(join(runsDir, `${runId}.json`), runStateSchema)];
+      await readRunState(rootDir, runId);
     } catch (error) {
       if (isNotFoundError(error)) {
         throw new Error(`Run state not found: ${runId}`);
@@ -172,7 +172,7 @@ async function readRuns(planningDir: string, runId?: string): Promise<RunState[]
     fileNames
       .filter((fileName) => fileName.endsWith(".json"))
       .sort()
-      .map((fileName) => readJsonFile(join(runsDir, fileName), runStateSchema)),
+      .map((fileName) => readRunState(rootDir, fileName.slice(0, -".json".length))),
   );
 }
 
@@ -233,11 +233,20 @@ function normalizeStatusState(state: StatusStateInput): Required<StatusStateInpu
 }
 
 function selectRun(runs: RunState[], runId?: string): RunState | null {
+  const activeRuns = runs.filter((run) => run.current_stage !== "complete");
+
+  if (activeRuns.length > 1) {
+    const runIds = activeRuns.map((run) => run.id).sort().join(", ");
+    throw new Error(
+      `Cannot determine status: multiple active runs exist (${runIds}). Complete or remove duplicate .planning/runs entries before continuing.`,
+    );
+  }
+
   if (runId) {
     return runs.find((run) => run.id === runId) ?? null;
   }
 
-  return runs.find((run) => run.current_stage !== "complete") ?? runs.at(-1) ?? null;
+  return activeRuns[0] ?? runs.at(-1) ?? null;
 }
 
 function selectCurrentPhase(phases: PhasesState, run: RunState | null): StatusPhase | null {

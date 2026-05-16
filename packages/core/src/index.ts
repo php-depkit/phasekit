@@ -77,6 +77,16 @@ export type {
   RunStageTransitionInput,
 } from "./runs/lifecycle";
 export {
+  createPhaseRun,
+  readRunState,
+  runIdForPhase,
+  writeRunState,
+} from "./runs/persistence";
+export type {
+  CreateRunOptions,
+  CreateRunResult,
+} from "./runs/persistence";
+export {
   toPhasesState,
   validateGrillMeQuestionAnswer,
   validateGrillMeQuestion,

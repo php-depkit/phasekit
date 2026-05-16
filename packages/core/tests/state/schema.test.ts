@@ -108,6 +108,7 @@ describe("state schemas", () => {
         current_phase: "1",
         current_plan: "1.1",
         current_stage: "execution",
+        started_at: "2026-05-15T00:00:00.000Z",
         claimed_tasks: [
           {
             id: "task-1",
@@ -136,6 +137,7 @@ describe("state schemas", () => {
       current_phase: "1",
       current_plan: "1.1",
       current_stage: "execution",
+      started_at: "2026-05-15T00:00:00.000Z",
       claimed_tasks: [
         {
           id: "task-1",

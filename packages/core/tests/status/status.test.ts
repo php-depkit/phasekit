@@ -47,6 +47,7 @@ function run(overrides: Partial<RunState> = {}): RunState {
     current_phase: "P1",
     current_plan: "plan-1",
     current_stage: "planning",
+    started_at: "2026-05-15T00:00:00.000Z",
     claimed_tasks: [],
     completed_checks: [],
     changed_files: [],
@@ -138,6 +139,50 @@ describe("status and next action", () => {
       target_stage: "execution",
       allowed_next_stages: ["execution"],
     });
+  });
+
+  test("rejects unsafe explicit run ids", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+
+    await expect(getStatus({ rootDir, runId: "../project" })).rejects.toThrow(
+      "Unsafe run id \"../project\". Run IDs must be file names stored directly under .planning/runs.",
+    );
+  });
+
+  test("rejects ambiguous multiple active runs", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+    await writePhases(rootDir, [phase("in_progress")]);
+    await writeRun(rootDir, run({ id: "run-1", current_stage: "planning" }));
+    await writeRun(rootDir, run({ id: "run-2", current_stage: "execution" }));
+
+    await expect(getStatus({ rootDir })).rejects.toThrow(
+      "Cannot determine status: multiple active runs exist (run-1, run-2). Complete or remove duplicate .planning/runs entries before continuing.",
+    );
+  });
+
+  test("rejects run files whose internal id does not match the scanned file name", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+    await writePhases(rootDir, [phase("in_progress")]);
+    await writeJsonFile(join(rootDir, ".planning", "runs", "safe.json"), run({ id: "other" }));
+
+    await expect(getStatus({ rootDir })).rejects.toThrow(
+      'Invalid run state safe: file contains id "other"; expected "safe".',
+    );
+  });
+
+  test("rejects ambiguous multiple active runs with explicit run id", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+    await writePhases(rootDir, [phase("in_progress")]);
+    await writeRun(rootDir, run({ id: "run-1", current_stage: "planning" }));
+    await writeRun(rootDir, run({ id: "run-2", current_stage: "execution" }));
+
+    await expect(getStatus({ rootDir, runId: "run-1" })).rejects.toThrow(
+      "Cannot determine status: multiple active runs exist (run-1, run-2). Complete or remove duplicate .planning/runs entries before continuing.",
+    );
   });
 
   test("does not skip required stages when computing next action", () => {

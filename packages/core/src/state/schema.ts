@@ -107,8 +107,9 @@ export const runStateSchema = z
   .object({
     id: z.string().min(1),
     current_phase: z.string().min(1),
-    current_plan: z.string().min(1).optional(),
+    current_plan: z.string().min(1).nullable(),
     current_stage: runStageSchema,
+    started_at: z.string().datetime(),
     claimed_tasks: z.array(runTaskSchema),
     completed_checks: z.array(z.string().min(1)),
     changed_files: z.array(z.string().min(1)),
