@@ -22,6 +22,22 @@ export {
 } from "./config/schema";
 export type { PhasekitConfig, PhasekitConfigOverride } from "./config/schema";
 export {
+  confirmStackDecision,
+  decideStack,
+  detectGreenfieldProject,
+  writeConfirmedProjectStack,
+} from "./greenfield/index";
+export type {
+  ConfirmedStackDecision,
+  DecideStackOptions,
+  DetectGreenfieldProjectOptions,
+  GreenfieldDetection,
+  GreenfieldRepositoryInput,
+  StackDecision,
+  StackDecisionBlocker,
+  StackDeclaration,
+} from "./greenfield/index";
+export {
   expandIngestPaths,
 } from "./ingest/paths";
 export type {
