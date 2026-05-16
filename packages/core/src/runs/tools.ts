@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import { readRunState, writeRunState } from "./persistence";
-import { type TaskPlan, type TaskPlanTask, taskPlanSchema } from "./tasks";
+import { type TaskPlan, type TaskPlanCheck, type TaskPlanTask, taskPlanSchema } from "./tasks";
 import { runBlockerSchema, type RunBlocker } from "./lifecycle";
 import type { RunState } from "../state/schema";
 
@@ -44,7 +44,7 @@ export type RecordRunBlockerInput = z.infer<typeof recordRunBlockerInputSchema>;
 export type ClaimRunTaskOptions = {
   rootDir?: string;
   runId: string;
-  plan: TaskPlan;
+  plan: unknown;
   taskId: string;
   ownerAgentId?: string;
   now?: Date;
@@ -53,16 +53,16 @@ export type ClaimRunTaskOptions = {
 export type CompleteRunTaskOptions = {
   rootDir?: string;
   runId: string;
-  plan: TaskPlan;
+  plan: unknown;
   taskId: string;
-  evidence: TaskCompletionEvidence;
+  evidence: unknown;
   now?: Date;
 };
 
 export type RecordRunBlockerOptions = {
   rootDir?: string;
   runId: string;
-  blocker: RecordRunBlockerInput;
+  blocker: unknown;
   now?: Date;
 };
 
@@ -148,19 +148,40 @@ export async function completeRunTask(options: CompleteRunTaskOptions): Promise<
     throw new Error(`Cannot complete task ${task.id}: active claimed task is ${activeTask?.id ?? "none"}.`);
   }
 
+  const now = options.now ?? new Date();
+
   if (requiresChangedFileEvidence(task) && (evidence.changed_files?.length ?? 0) === 0) {
+    const nextRun = addTaskBlocker(
+      run,
+      task,
+      `Task ${task.id} is missing changed-file evidence required for behavior or file-changing tasks.`,
+      `Record changed-file evidence for task ${task.id} before completing it, or re-plan if the task no longer changes files.`,
+      now,
+    );
+    await writeRunState(rootDir, nextRun);
     throw new Error(`Cannot complete task ${task.id}: changed-file evidence is required for behavior or file-changing tasks.`);
   }
 
-  validateCheckEvidenceMatchesTask(task, evidence.check_results);
+  const checkEvidenceError = validateCheckEvidenceMatchesTask(task, evidence.check_results);
+  if (checkEvidenceError) {
+    const nextRun = addTaskBlocker(
+      run,
+      task,
+      checkEvidenceError.reason,
+      checkEvidenceError.nextStep,
+      now,
+    );
+    await writeRunState(rootDir, nextRun);
+    throw new Error(checkEvidenceError.message);
+  }
 
-  const completedAt = (options.now ?? new Date()).toISOString();
+  const completedAt = now.toISOString();
   const checkSummaries = evidence.check_results.map(formatCheckResult);
   const changedFiles = evidence.changed_files ?? [];
   const unplannedChangedFiles = changedFiles.filter((file) => !task.files.includes(file));
 
   if (unplannedChangedFiles.length > 0) {
-    const nextRun = addScopeDriftBlocker(run, task, unplannedChangedFiles, options.now ?? new Date());
+    const nextRun = addScopeDriftBlocker(run, task, unplannedChangedFiles, now);
     await writeRunState(rootDir, nextRun);
     throw new Error(
       `Cannot complete task ${task.id}: changed-file evidence includes files outside the task plan: ${unplannedChangedFiles.join(", ")}.`,
@@ -272,16 +293,51 @@ function requiresChangedFileEvidence(task: TaskPlanTask): boolean {
   return task.adds_behavior || task.files.length > 0;
 }
 
-function validateCheckEvidenceMatchesTask(task: TaskPlanTask, checkResults: readonly TaskCompletionCheckResult[]): void {
+function validateCheckEvidenceMatchesTask(
+  task: TaskPlanTask,
+  checkResults: readonly TaskCompletionCheckResult[],
+): { message: string; reason: string; nextStep: string } | null {
   for (const result of checkResults) {
-    const matchesPlannedCheck = task.checks.some(
-      (check) => (result.command && check.command === result.command) || (result.name && check.name === result.name),
-    );
+    const matchesPlannedCheck = task.checks.some((check) => checkMatchesEvidence(check, result));
 
     if (!matchesPlannedCheck) {
-      throw new Error(`Cannot complete task ${task.id}: check evidence ${formatCheckResult(result)} is not in the task plan.`);
+      const check = formatCheckResult(result);
+
+      return {
+        message: `Cannot complete task ${task.id}: check evidence ${check} is not in the task plan.`,
+        reason: `Task ${task.id} submitted unplanned check evidence: ${check}.`,
+        nextStep: `Stop task ${task.id}, run only the checks in the task plan, or re-plan before completing the task.`,
+      };
     }
   }
+
+  const missingChecks = task.checks.filter(
+    (check) => !checkResults.some((result) => checkMatchesEvidence(check, result)),
+  );
+
+  if (missingChecks.length > 0) {
+    const checks = missingChecks.map(formatTaskPlanCheck).join(", ");
+
+    return {
+      message: `Cannot complete task ${task.id}: missing required check evidence for ${checks}.`,
+      reason: `Task ${task.id} is missing required check evidence for: ${checks}.`,
+      nextStep: `Run and record passing evidence for every check in task ${task.id} before completing it.`,
+    };
+  }
+
+  return null;
+}
+
+function checkMatchesEvidence(check: TaskPlanCheck, result: TaskCompletionCheckResult): boolean {
+  if (check.command && check.name) {
+    return result.command === check.command && result.name === check.name;
+  }
+
+  return Boolean((check.command && result.command === check.command) || (check.name && result.name === check.name));
+}
+
+function formatTaskPlanCheck(check: TaskPlanCheck): string {
+  return check.command ?? check.name ?? "unknown check";
 }
 
 function addScopeDriftBlocker(
@@ -294,6 +350,19 @@ function addScopeDriftBlocker(
   const blocker = runBlockerSchema.parse({
     reason: `Scope drift: Task ${task.id} changed files outside its planned scope: ${files}.`,
     next_step: `Stop task ${task.id}, review the unplanned files, and re-plan before completing the task.`,
+    at: now.toISOString(),
+  });
+
+  return {
+    ...run,
+    blockers: [...run.blockers, blocker],
+  };
+}
+
+function addTaskBlocker(run: RunState, task: TaskPlanTask, reason: string, nextStep: string, now: Date): RunState {
+  const blocker = runBlockerSchema.parse({
+    reason,
+    next_step: nextStep,
     at: now.toISOString(),
   });
 

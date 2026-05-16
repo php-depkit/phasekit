@@ -106,6 +106,20 @@ describe("task plan validation", () => {
     ).toThrow("Task dependency cycle detected: task-1 -> task-2 -> task-1.");
   });
 
+  test("rejects dependencies that point to later tasks in a sequential plan", () => {
+    expect(() =>
+      validateTaskPlan(
+        plan({
+          tasks: [
+            task({ id: "task-1", source_requirement_ids: ["REQ-1"], dependencies: ["task-2"] }),
+            task({ id: "task-2", source_requirement_ids: ["REQ-2"] }),
+          ],
+        }),
+        validatorOptions,
+      ),
+    ).toThrow("Task task-1 dependencies references later task task-2; dependencies must appear before dependent tasks.");
+  });
+
   test("rejects oversized task plans using local validator options", () => {
     const oversizedScope = "Add validation with many concrete implementation details.";
 

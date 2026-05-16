@@ -53,7 +53,7 @@ export type TaskPlanTask = z.infer<typeof taskPlanTaskSchema>;
 export type TaskPlan = z.infer<typeof taskPlanSchema>;
 export type TaskPlanValidatorOptions = z.infer<typeof taskPlanValidatorOptionsSchema>;
 
-export function validateTaskPlan(plan: unknown, options: TaskPlanValidatorOptions): TaskPlan {
+export function validateTaskPlan(plan: unknown, options: unknown): TaskPlan {
   const parsedOptions = taskPlanValidatorOptionsSchema.parse(options);
   const parsedPlan = taskPlanSchema.parse(plan);
 
@@ -165,6 +165,23 @@ function validateTaskDependencies(tasks: readonly TaskPlanTask[], options: TaskP
   }
 
   rejectDependencyCycles(tasks);
+  validateDependencyOrder(tasks);
+}
+
+function validateDependencyOrder(tasks: readonly TaskPlanTask[]): void {
+  const previousTaskIds = new Set<string>();
+
+  for (const task of tasks) {
+    for (const dependency of task.dependencies ?? []) {
+      if (!previousTaskIds.has(dependency)) {
+        throw new Error(
+          `Task ${task.id} dependencies references later task ${dependency}; dependencies must appear before dependent tasks.`,
+        );
+      }
+    }
+
+    previousTaskIds.add(task.id);
+  }
 }
 
 function rejectDependencyCycles(tasks: readonly TaskPlanTask[]): void {

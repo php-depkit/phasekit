@@ -12,6 +12,32 @@ import {
   phasekitOpenCodePlugin,
 } from "../src/adapter";
 
+const taskPlan = {
+  id: "plan-1",
+  phase_id: "P6-T4",
+  tasks: [
+    {
+      id: "task-1",
+      title: "Wire run-phase artifact",
+      source_requirement_ids: ["REQ-1"],
+      scope: "Wire the run phase artifact to native tools with focused coverage.",
+      files: ["packages/install/src/index.ts"],
+      checks: [{ command: "bun test packages/install/tests/index.test.ts" }],
+      adds_behavior: true,
+    },
+  ],
+};
+
+const validatorOptions = {
+  source_requirement_ids: ["REQ-1"],
+  max_tasks: 3,
+  max_scope_characters: 180,
+  max_files_per_task: 3,
+  max_checks_per_task: 2,
+  max_dependencies_per_task: 1,
+  min_scope_words: 8,
+};
+
 async function withTempDir<T>(run: (rootDir: string) => Promise<T>): Promise<T> {
   const rootDir = await mkdtemp(join(tmpdir(), "phasekit-opencode-"));
 
@@ -48,6 +74,29 @@ async function writePhases(
           done_criteria: ["The native run creation tool succeeds."],
           status: phase.status,
         })),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
+async function writeRun(rootDir: string): Promise<void> {
+  await writeTextFile(
+    rootDir,
+    ".planning/runs/phase-P6-T4.json",
+    `${JSON.stringify(
+      {
+        id: "phase-P6-T4",
+        current_phase: "P6-T4",
+        current_plan: "plan-1",
+        current_stage: "execution",
+        started_at: "2026-05-16T00:00:00.000Z",
+        claimed_tasks: [],
+        completed_checks: [],
+        changed_files: [],
+        commit_ids: [],
+        blockers: [],
       },
       null,
       2,
@@ -176,6 +225,39 @@ describe("@phasekit/opencode", () => {
     });
   });
 
+  test("validates, claims, completes, and blocks tasks through core-backed tools", async () => {
+    await withTempDir(async (rootDir) => {
+      const tools = createPhasekitToolHandlers({ rootDir });
+
+      await tools.phasekit_init_project();
+      await writeRun(rootDir);
+
+      const validated = await tools.phasekit_validate_plan({ plan: taskPlan, options: validatorOptions });
+      const claimed = await tools.phasekit_claim_task({ runId: "phase-P6-T4", plan: taskPlan, taskId: "task-1" });
+      const completed = await tools.phasekit_complete_task({
+        runId: "phase-P6-T4",
+        plan: taskPlan,
+        taskId: "task-1",
+        evidence: {
+          check_results: [{ command: "bun test packages/install/tests/index.test.ts", status: "passed" }],
+          changed_files: ["packages/install/src/index.ts"],
+        },
+      });
+      const blocked = await tools.phasekit_record_blocker({
+        runId: "phase-P6-T4",
+        blocker: { reason: "Need user decision.", next_step: "Ask the user for the missing decision." },
+      });
+
+      expect(validated).toMatchObject({ ok: true, data: { id: "plan-1" } });
+      expect(claimed).toMatchObject({ ok: true, data: { claimed_tasks: [{ id: "task-1" }] } });
+      expect(completed).toMatchObject({
+        ok: true,
+        data: { claimed_tasks: [{ id: "task-1", changed_files: ["packages/install/src/index.ts"] }] },
+      });
+      expect(blocked).toMatchObject({ ok: true, data: { blockers: [{ reason: "Need user decision." }] } });
+    });
+  });
+
   test("converts ingest failures into structured actionable errors", async () => {
     await withTempDir(async (rootDir) => {
       await writeTextFile(rootDir, "docs/page.html", "<h1>Unsupported</h1>\n");
@@ -215,11 +297,15 @@ describe("@phasekit/opencode", () => {
   test("does not expose runtime slash command or agent registration", () => {
     expect(Object.keys(createPhasekitToolHandlers()).sort()).toEqual([
       "phasekit_advance",
+      "phasekit_claim_task",
+      "phasekit_complete_task",
       "phasekit_create_run",
       "phasekit_get_status",
       "phasekit_ingest_paths",
       "phasekit_init_project",
       "phasekit_next_action",
+      "phasekit_record_blocker",
+      "phasekit_validate_plan",
       "phasekit_write_artifact",
     ]);
   });
@@ -229,11 +315,15 @@ describe("@phasekit/opencode", () => {
 
     expect(Object.keys(tools).sort()).toEqual([
       "phasekit_advance",
+      "phasekit_claim_task",
+      "phasekit_complete_task",
       "phasekit_create_run",
       "phasekit_get_status",
       "phasekit_ingest_paths",
       "phasekit_init_project",
       "phasekit_next_action",
+      "phasekit_record_blocker",
+      "phasekit_validate_plan",
       "phasekit_write_artifact",
     ]);
     expect(tools.phasekit_get_status.description).toContain("Phasekit status");
@@ -283,11 +373,15 @@ describe("@phasekit/opencode", () => {
       expect(Object.keys(hooks).sort()).toEqual(["tool"]);
       expect(Object.keys(hooks.tool ?? {}).sort()).toEqual([
         "phasekit_advance",
+        "phasekit_claim_task",
+        "phasekit_complete_task",
         "phasekit_create_run",
         "phasekit_get_status",
         "phasekit_ingest_paths",
         "phasekit_init_project",
         "phasekit_next_action",
+        "phasekit_record_blocker",
+        "phasekit_validate_plan",
         "phasekit_write_artifact",
       ]);
     });

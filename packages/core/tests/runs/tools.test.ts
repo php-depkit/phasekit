@@ -270,9 +270,20 @@ describe("run task tools", () => {
       }),
     ).rejects.toThrow("Cannot complete task task-1: changed-file evidence is required for behavior or file-changing tasks.");
 
+    await expect(readRunState(rootDir, "run-1")).resolves.toMatchObject({
+      blockers: [
+        {
+          reason: "Task task-1 is missing changed-file evidence required for behavior or file-changing tasks.",
+          next_step:
+            "Record changed-file evidence for task task-1 before completing it, or re-plan if the task no longer changes files.",
+        },
+      ],
+    });
+
+    const unplannedCheckRoot = await createRunFixture(run({ claimed_tasks: [{ id: "task-1" }] }));
     await expect(
       completeRunTask({
-        rootDir,
+        rootDir: unplannedCheckRoot,
         runId: "run-1",
         plan: plan(),
         taskId: "task-1",
@@ -284,6 +295,75 @@ describe("run task tools", () => {
     ).rejects.toThrow(
       "Cannot complete task task-1: check evidence bun test packages/core/tests/other is not in the task plan.",
     );
+    await expect(readRunState(unplannedCheckRoot, "run-1")).resolves.toMatchObject({
+      blockers: [
+        {
+          reason: "Task task-1 submitted unplanned check evidence: bun test packages/core/tests/other.",
+          next_step: "Stop task task-1, run only the checks in the task plan, or re-plan before completing the task.",
+        },
+      ],
+    });
+  });
+
+  test("requires evidence for every planned check before completing a task", async () => {
+    const rootDir = await createRunFixture(run({ claimed_tasks: [{ id: "task-1" }] }));
+    const multiCheckPlan = plan({
+      tasks: [
+        {
+          ...plan().tasks[0]!,
+          checks: [{ command: "bun test packages/core/tests/runs" }, { command: "bun run typecheck" }],
+        },
+      ],
+    });
+
+    await expect(
+      completeRunTask({
+        rootDir,
+        runId: "run-1",
+        plan: multiCheckPlan,
+        taskId: "task-1",
+        evidence: {
+          check_results: [{ command: "bun test packages/core/tests/runs", status: "passed" }],
+          changed_files: ["packages/core/tests/runs/tools.test.ts"],
+        },
+        now: new Date("2026-05-16T00:06:00.000Z"),
+      }),
+    ).rejects.toThrow("Cannot complete task task-1: missing required check evidence for bun run typecheck.");
+
+    const blocked = await readRunState(rootDir, "run-1");
+    expect(blocked.claimed_tasks[0]).toEqual({ id: "task-1" });
+    expect(blocked.blockers).toEqual([
+      {
+        reason: "Task task-1 is missing required check evidence for: bun run typecheck.",
+        next_step: "Run and record passing evidence for every check in task task-1 before completing it.",
+        at: "2026-05-16T00:06:00.000Z",
+      },
+    ]);
+  });
+
+  test("requires both check name and command to match when both are planned", async () => {
+    const rootDir = await createRunFixture(run({ claimed_tasks: [{ id: "task-1" }] }));
+    const namedCheckPlan = plan({
+      tasks: [
+        {
+          ...plan().tasks[0]!,
+          checks: [{ name: "run tests", command: "bun test packages/core/tests/runs" }],
+        },
+      ],
+    });
+
+    await expect(
+      completeRunTask({
+        rootDir,
+        runId: "run-1",
+        plan: namedCheckPlan,
+        taskId: "task-1",
+        evidence: {
+          check_results: [{ name: "run tests", command: "bun run lint", status: "passed" }],
+          changed_files: ["packages/core/tests/runs/tools.test.ts"],
+        },
+      }),
+    ).rejects.toThrow("Cannot complete task task-1: check evidence bun run lint is not in the task plan.");
   });
 
   test("records actionable blockers, including scope drift, and stops progression", async () => {

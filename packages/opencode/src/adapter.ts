@@ -1,10 +1,14 @@
 import { tool, type Plugin, type ToolDefinition, type ToolResult } from "@opencode-ai/plugin";
 import {
   createPhaseRun,
+  claimRunTask,
+  completeRunTask,
   describeCorePackage,
   expandIngestPaths,
   getStatus,
   initializePlanningState,
+  recordRunBlocker,
+  validateTaskPlan,
   type ExpandIngestPathsOptions,
   type GetStatusOptions,
   type InitializePlanningStateOptions,
@@ -13,6 +17,8 @@ import {
   type NextAction,
   type PhasekitStatus,
   type CreateRunResult,
+  type RunState,
+  type TaskPlan,
 } from "@phasekit/core";
 
 export const opencodePackageName = "@phasekit/opencode" as const;
@@ -44,6 +50,26 @@ export type IngestPathsInput = PhasekitToolContext & Pick<ExpandIngestPathsOptio
 export type CreateRunInput = PhasekitToolContext & {
   phaseId: string;
 };
+export type ValidatePlanInput = {
+  plan: unknown;
+  options: unknown;
+};
+export type ClaimTaskInput = PhasekitToolContext & {
+  runId: string;
+  plan: unknown;
+  taskId: string;
+  ownerAgentId?: string;
+};
+export type CompleteTaskInput = PhasekitToolContext & {
+  runId: string;
+  plan: unknown;
+  taskId: string;
+  evidence: unknown;
+};
+export type RecordBlockerInput = PhasekitToolContext & {
+  runId: string;
+  blocker: unknown;
+};
 export type AdvanceInput = PhasekitToolContext & {
   runId: string;
   targetStage: string;
@@ -59,6 +85,10 @@ export type PhasekitToolHandlers = {
   phasekit_next_action(input?: NextActionInput): Promise<PhasekitToolResult<NextAction>>;
   phasekit_ingest_paths(input: IngestPathsInput): Promise<PhasekitToolResult<IngestTextInput[]>>;
   phasekit_create_run(input: CreateRunInput): Promise<PhasekitToolResult<CreateRunResult>>;
+  phasekit_validate_plan(input: ValidatePlanInput): Promise<PhasekitToolResult<TaskPlan>>;
+  phasekit_claim_task(input: ClaimTaskInput): Promise<PhasekitToolResult<RunState>>;
+  phasekit_complete_task(input: CompleteTaskInput): Promise<PhasekitToolResult<RunState>>;
+  phasekit_record_blocker(input: RecordBlockerInput): Promise<PhasekitToolResult<RunState>>;
   phasekit_advance(input: AdvanceInput): Promise<PhasekitToolResult<never>>;
   phasekit_write_artifact(input: WriteArtifactInput): Promise<PhasekitToolResult<never>>;
 };
@@ -95,6 +125,34 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
     }),
     phasekit_create_run: (input) => runTool(async () => {
       return createPhaseRun({ rootDir: resolveRootDir(input, defaultContext), phaseId: input.phaseId });
+    }),
+    phasekit_validate_plan: (input) => runTool(async () => {
+      return validateTaskPlan(input.plan, input.options);
+    }),
+    phasekit_claim_task: (input) => runTool(async () => {
+      return claimRunTask({
+        rootDir: resolveRootDir(input, defaultContext),
+        runId: input.runId,
+        plan: input.plan,
+        taskId: input.taskId,
+        ownerAgentId: input.ownerAgentId,
+      });
+    }),
+    phasekit_complete_task: (input) => runTool(async () => {
+      return completeRunTask({
+        rootDir: resolveRootDir(input, defaultContext),
+        runId: input.runId,
+        plan: input.plan,
+        taskId: input.taskId,
+        evidence: input.evidence,
+      });
+    }),
+    phasekit_record_blocker: (input) => runTool(async () => {
+      return recordRunBlocker({
+        rootDir: resolveRootDir(input, defaultContext),
+        runId: input.runId,
+        blocker: input.blocker,
+      });
     }),
     phasekit_advance: () => notImplementedTool("phasekit_advance", "Run advancement is implemented in a later Phasekit phase."),
     phasekit_write_artifact: () => notImplementedTool(
@@ -176,6 +234,85 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
         return toOpenCodeToolResult(
           "Phasekit create run",
           await handlers.phasekit_create_run({ rootDir: args.rootDir, phaseId: args.phaseId }),
+        );
+      },
+    }),
+    phasekit_validate_plan: tool({
+      description: "Validate one Phasekit task plan before executor work starts.",
+      args: {
+        plan: schema.unknown(),
+        options: schema.unknown(),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult(
+          "Phasekit validate plan",
+          await handlers.phasekit_validate_plan({ plan: args.plan, options: args.options }),
+        );
+      },
+    }),
+    phasekit_claim_task: tool({
+      description: "Claim exactly one next Phasekit task for a sequential run.",
+      args: {
+        rootDir: schema.string().optional(),
+        runId: schema.string(),
+        plan: schema.unknown(),
+        taskId: schema.string(),
+        ownerAgentId: schema.string().optional(),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult(
+          "Phasekit claim task",
+          await handlers.phasekit_claim_task({
+            rootDir: args.rootDir,
+            runId: args.runId,
+            plan: args.plan,
+            taskId: args.taskId,
+            ownerAgentId: args.ownerAgentId,
+          }),
+        );
+      },
+    }),
+    phasekit_complete_task: tool({
+      description: "Complete one claimed Phasekit task with required native evidence.",
+      args: {
+        rootDir: schema.string().optional(),
+        runId: schema.string(),
+        plan: schema.unknown(),
+        taskId: schema.string(),
+        evidence: schema.unknown(),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult(
+          "Phasekit complete task",
+          await handlers.phasekit_complete_task({
+            rootDir: args.rootDir,
+            runId: args.runId,
+            plan: args.plan,
+            taskId: args.taskId,
+            evidence: args.evidence,
+          }),
+        );
+      },
+    }),
+    phasekit_record_blocker: tool({
+      description: "Record an actionable Phasekit run blocker and stop progression.",
+      args: {
+        rootDir: schema.string().optional(),
+        runId: schema.string(),
+        blocker: schema.unknown(),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult(
+          "Phasekit record blocker",
+          await handlers.phasekit_record_blocker({ rootDir: args.rootDir, runId: args.runId, blocker: args.blocker }),
         );
       },
     }),
