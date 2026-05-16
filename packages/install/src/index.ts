@@ -7,7 +7,7 @@ export const installPackageName = "@phasekit/install" as const;
 const commandManagedMarker = "<!-- phasekit:managed opencode-command v1 -->";
 const agentManagedMarker = "<!-- phasekit:managed opencode-agent v1 -->";
 
-export type OpenCodeCommandName = "pk-init" | "pk-status" | "pk-next" | "pk-config" | "pk-ingest";
+export type OpenCodeCommandName = "pk-init" | "pk-status" | "pk-next" | "pk-config" | "pk-ingest" | "pk-run-phase";
 export type OpenCodeAgentName =
   | "orchestrator"
   | "context-scout"
@@ -128,6 +128,7 @@ type AgentTemplate = {
   name: OpenCodeAgentName;
   description: string;
   responsibility: string;
+  rules?: string[];
 };
 
 const commandTemplates: CommandTemplate[] = [
@@ -171,6 +172,15 @@ const commandTemplates: CommandTemplate[] = [
       "Return the tool result directly and do not expand paths, extract requirements, or write `.planning` state from this command markdown.",
     ],
   },
+  {
+    name: "pk-run-phase",
+    description: "Run or resume one Phasekit phase through native tools.",
+    body: [
+      "If the user provides a phase id, pass that id to the native `phasekit_create_run` tool for the current workspace root.",
+      "If the user does not provide a phase id, call `phasekit_next_action` and follow the returned native Phasekit tool direction instead of guessing from files or chat history.",
+      "Use `phasekit_get_status` to report current run state after tool calls and do not claim tasks, complete tasks, record blockers, verify, commit, or mutate `.planning` state from this command markdown.",
+    ],
+  },
 ];
 
 const agentTemplates: AgentTemplate[] = [
@@ -208,6 +218,12 @@ const agentTemplates: AgentTemplate[] = [
     name: "executor",
     description: "Implement one scoped Phasekit task.",
     responsibility: "Make only the changes requested by one approved task and stop with a blocker when scope is unclear or drifting.",
+    rules: [
+      "Work on exactly one claimed task for the active run; do not claim, start, or execute a second task in the same assignment.",
+      "Use `phasekit_claim_task` before editing when that native tool exists; stop if the tool cannot claim exactly the assigned task.",
+      "Use `phasekit_complete_task` only after required checks and changed-file evidence are available when that native tool exists.",
+      "Use `phasekit_record_blocker` when that native tool exists for scope drift, ambiguity, missing evidence, failed required checks, unplanned changed files, or missing required tool support.",
+    ],
   },
   {
     name: "reviewer",
@@ -265,6 +281,7 @@ function renderAgent(template: AgentTemplate): string {
     "- Do not make assumptions when an answer affects architecture, public behavior, state schema, plugin behavior, command names, persistence, or implementation scope.",
     "- Do not perform broad rewrites, unrelated refactors, or scope expansion beyond the assigned approved plan.",
     "- Do not continue through scope drift; stop and report a blocker with the specific missing decision or validation.",
+    ...(template.rules?.map((rule) => `- ${rule}`) ?? []),
     "- Do not add compatibility with old GSD commands, workflows, naming, or behavior.",
     "- Do not treat markdown artifacts, chat history, summaries, or generated files as runtime state or proof of completion.",
     "- Do not bypass native Phasekit tool validation; tools own state transitions, completion, artifact writes, and verification records.",

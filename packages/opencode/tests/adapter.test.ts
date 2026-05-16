@@ -28,6 +28,33 @@ async function writeTextFile(rootDir: string, relativePath: string, text: string
   await writeFile(filePath, text, "utf8");
 }
 
+async function writePhases(
+  rootDir: string,
+  phases: { id: string; status: "pending" | "in_progress" | "blocked" | "complete" }[],
+): Promise<void> {
+  await writeTextFile(
+    rootDir,
+    ".planning/phases.json",
+    `${JSON.stringify(
+      {
+        phases: phases.map((phase) => ({
+          id: phase.id,
+          source_requirement_ids: ["REQ-1"],
+          expected_behavior: "Run-phase artifacts can create or resume a phase run.",
+          relevant_context: ["packages/install/src/index.ts"],
+          likely_change_areas: ["packages/install/src/index.ts"],
+          test_strategy: ["Run OpenCode adapter tests."],
+          integration_risks: [],
+          done_criteria: ["The native run creation tool succeeds."],
+          status: phase.status,
+        })),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
 function createToolContext(rootDir: string) {
   return {
     sessionID: "session-1",
@@ -126,6 +153,29 @@ describe("@phasekit/opencode", () => {
     });
   });
 
+  test("creates or resumes a run through a core-backed tool", async () => {
+    await withTempDir(async (rootDir) => {
+      const tools = createPhasekitToolHandlers({ rootDir });
+
+      await tools.phasekit_init_project();
+      await writePhases(rootDir, [{ id: "P6-T4", status: "pending" }]);
+
+      const created = await tools.phasekit_create_run({ phaseId: "P6-T4" });
+      const resumed = await tools.phasekit_create_run({ phaseId: "P6-T4" });
+
+      expect(created.ok).toBe(true);
+      expect(resumed.ok).toBe(true);
+      if (!created.ok || !resumed.ok) {
+        throw new Error("Expected run creation tools to succeed.");
+      }
+
+      expect(created.data.resumed).toBe(false);
+      expect(created.data.run).toMatchObject({ id: "phase-P6-T4", current_phase: "P6-T4" });
+      expect(resumed.data.resumed).toBe(true);
+      expect(resumed.data.run).toEqual(created.data.run);
+    });
+  });
+
   test("converts ingest failures into structured actionable errors", async () => {
     await withTempDir(async (rootDir) => {
       await writeTextFile(rootDir, "docs/page.html", "<h1>Unsupported</h1>\n");
@@ -165,6 +215,7 @@ describe("@phasekit/opencode", () => {
   test("does not expose runtime slash command or agent registration", () => {
     expect(Object.keys(createPhasekitToolHandlers()).sort()).toEqual([
       "phasekit_advance",
+      "phasekit_create_run",
       "phasekit_get_status",
       "phasekit_ingest_paths",
       "phasekit_init_project",
@@ -178,6 +229,7 @@ describe("@phasekit/opencode", () => {
 
     expect(Object.keys(tools).sort()).toEqual([
       "phasekit_advance",
+      "phasekit_create_run",
       "phasekit_get_status",
       "phasekit_ingest_paths",
       "phasekit_init_project",
@@ -198,7 +250,9 @@ describe("@phasekit/opencode", () => {
       const init = await tools.phasekit_init_project.execute({}, context);
       const status = await tools.phasekit_get_status.execute({}, context);
       await writeTextFile(rootDir, "docs/prd.md", "Requirement\n");
+      await writePhases(rootDir, [{ id: "P6-T4", status: "pending" }]);
       const ingest = await tools.phasekit_ingest_paths.execute({ inputPaths: ["docs/prd.md"] }, context);
+      const run = await tools.phasekit_create_run.execute({ phaseId: "P6-T4" }, context);
 
       expect(parseToolOutput(init)).toMatchObject({ ok: true });
       expect(parseToolOutput(status)).toMatchObject({
@@ -211,6 +265,10 @@ describe("@phasekit/opencode", () => {
       expect(parseToolOutput(ingest)).toMatchObject({
         ok: true,
         data: [{ relativePath: "docs/prd.md", text: "Requirement\n" }],
+      });
+      expect(parseToolOutput(run)).toMatchObject({
+        ok: true,
+        data: { resumed: false, run: { id: "phase-P6-T4", current_phase: "P6-T4" } },
       });
     });
   });
@@ -225,6 +283,7 @@ describe("@phasekit/opencode", () => {
       expect(Object.keys(hooks).sort()).toEqual(["tool"]);
       expect(Object.keys(hooks.tool ?? {}).sort()).toEqual([
         "phasekit_advance",
+        "phasekit_create_run",
         "phasekit_get_status",
         "phasekit_ingest_paths",
         "phasekit_init_project",

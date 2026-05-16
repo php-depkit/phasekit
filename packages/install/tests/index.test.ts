@@ -14,6 +14,8 @@ import {
   installPackageName,
 } from "../src/index";
 
+const commandNames = ["pk-init", "pk-status", "pk-next", "pk-config", "pk-ingest", "pk-run-phase"] as const;
+
 const agentNames = [
   "orchestrator",
   "context-scout",
@@ -40,25 +42,17 @@ describe("@phasekit/install", () => {
 
       expect(getOpenCodeCommandsDir({ configRoot })).toBe(commandsDir);
       expect(generateOpenCodeCommandArtifacts({ configRoot })).toEqual(generateOpenCodeCommandArtifacts({ configRoot }));
-      expect(generateOpenCodeCommandArtifacts({ configRoot }).map((artifact) => artifact.path)).toEqual([
-        join(commandsDir, "pk-init.md"),
-        join(commandsDir, "pk-status.md"),
-        join(commandsDir, "pk-next.md"),
-        join(commandsDir, "pk-config.md"),
-        join(commandsDir, "pk-ingest.md"),
-      ]);
+      expect(generateOpenCodeCommandArtifacts({ configRoot }).map((artifact) => artifact.path)).toEqual(
+        commandNames.map((name) => join(commandsDir, `${name}.md`)),
+      );
     });
   });
 
   test("generates deterministic OpenCode command artifact paths under a home dir", async () => {
     await withTempDir(async (homeDir) => {
-      expect(generateOpenCodeCommandArtifacts({ homeDir }).map((artifact) => artifact.path)).toEqual([
-        join(homeDir, ".config", "opencode", "commands", "pk-init.md"),
-        join(homeDir, ".config", "opencode", "commands", "pk-status.md"),
-        join(homeDir, ".config", "opencode", "commands", "pk-next.md"),
-        join(homeDir, ".config", "opencode", "commands", "pk-config.md"),
-        join(homeDir, ".config", "opencode", "commands", "pk-ingest.md"),
-      ]);
+      expect(generateOpenCodeCommandArtifacts({ homeDir }).map((artifact) => artifact.path)).toEqual(
+        commandNames.map((name) => join(homeDir, ".config", "opencode", "commands", `${name}.md`)),
+      );
     });
   });
 
@@ -67,19 +61,14 @@ describe("@phasekit/install", () => {
       const result = await installOpenCodeCommandArtifacts({ configRoot });
 
       expect(result.commandsDir).toBe(join(configRoot, "opencode", "commands"));
-      expect(result.artifacts.map((artifact) => artifact.name)).toEqual([
-        "pk-init",
-        "pk-status",
-        "pk-next",
-        "pk-config",
-        "pk-ingest",
-      ]);
+      expect(result.artifacts.map((artifact) => artifact.name)).toEqual([...commandNames]);
 
       await expectCommandContent(configRoot, "pk-init", "phasekit_init_project");
       await expectCommandContent(configRoot, "pk-status", "phasekit_get_status");
       await expectCommandContent(configRoot, "pk-next", "phasekit_next_action");
       await expectCommandContent(configRoot, "pk-config", "phasekit_get_status");
       await expectCommandContent(configRoot, "pk-ingest", "phasekit_ingest_paths");
+      await expectCommandContent(configRoot, "pk-run-phase", "phasekit_create_run");
     });
   });
 
@@ -99,6 +88,29 @@ describe("@phasekit/install", () => {
       expect(artifact.content).not.toContain("expandIngestPaths");
       expect(artifact.content).not.toContain("extractSourceRequirements");
       expect(artifact.content).not.toContain("/phasekit:ingest");
+    });
+  });
+
+  test("generates a thin pk-run-phase command wrapper", async () => {
+    await withTempDir(async (configRoot) => {
+      const artifact = generateOpenCodeCommandArtifacts({ configRoot }).find(({ name }) => name === "pk-run-phase");
+
+      if (artifact === undefined) {
+        throw new Error("Missing pk-run-phase generated artifact.");
+      }
+
+      expect(artifact.path).toBe(join(configRoot, "opencode", "commands", "pk-run-phase.md"));
+      expect(artifact.content).toContain("# /pk-run-phase");
+      expect(artifact.content).toContain("phasekit_create_run");
+      expect(artifact.content).toContain("phasekit_next_action");
+      expect(artifact.content).toContain("phasekit_get_status");
+      expect(artifact.content).toContain("user provides a phase id");
+      expect(artifact.content).toContain("does not provide a phase id");
+      expect(artifact.content).not.toContain("readRunState");
+      expect(artifact.content).not.toContain("claimRunTask");
+      expect(artifact.content).not.toContain("completeRunTask");
+      expect(artifact.content).not.toContain("recordRunBlocker");
+      expect(artifact.content).not.toContain("/phasekit:run-phase");
     });
   });
 
@@ -173,6 +185,45 @@ describe("@phasekit/install", () => {
     });
   });
 
+  test("generates executor instructions for one claimed task and native task transitions", async () => {
+    await withTempDir(async (configRoot) => {
+      const artifact = generateOpenCodeAgentArtifacts({ configRoot }).find(({ name }) => name === "executor");
+
+      if (artifact === undefined) {
+        throw new Error("Missing executor generated artifact.");
+      }
+
+      expect(artifact.path).toBe(join(configRoot, "opencode", "agents", "executor.md"));
+      expect(artifact.content).toContain("exactly one claimed task");
+      expect(artifact.content).toContain("phasekit_claim_task");
+      expect(artifact.content).toContain("phasekit_complete_task");
+      expect(artifact.content).toContain("phasekit_record_blocker");
+      expect(artifact.content).toContain("required checks and changed-file evidence");
+      expect(artifact.content).toContain("scope drift, ambiguity, missing evidence, failed required checks, unplanned changed files");
+      expect(artifact.content).not.toContain("claimRunTask");
+      expect(artifact.content).not.toContain("completeRunTask");
+      expect(artifact.content).not.toContain("recordRunBlocker");
+      expect(artifact.content).not.toContain("/phasekit:run-phase");
+    });
+  });
+
+  test("generated command and agent artifacts avoid old command names and core run logic", () => {
+    const artifacts = [
+      ...generateOpenCodeCommandArtifacts({ configRoot: "/config" }),
+      ...generateOpenCodeAgentArtifacts({ configRoot: "/config" }),
+    ];
+
+    for (const artifact of artifacts) {
+      expect(artifact.content).not.toContain("/phasekit:run-phase");
+      expect(artifact.content).not.toContain("/phasekit:ingest");
+      expect(artifact.content).not.toContain("claimRunTask");
+      expect(artifact.content).not.toContain("completeRunTask");
+      expect(artifact.content).not.toContain("recordRunBlocker");
+      expect(artifact.content).not.toContain("readRunState");
+      expect(artifact.content).not.toContain("writeRunState");
+    }
+  });
+
   test("safely overwrites managed agent artifacts", async () => {
     await withTempDir(async (configRoot) => {
       await installOpenCodeAgentArtifacts({ configRoot });
@@ -221,6 +272,7 @@ async function expectCommandContent(configRoot: string, name: string, toolName: 
   expect(content).toContain("tool");
   expect(content).not.toContain("initializePlanningState");
   expect(content).not.toContain("getStatus({");
+  expect(content).not.toContain("/phasekit:run-phase");
 }
 
 async function expectAgentContent(configRoot: string, name: string): Promise<void> {
@@ -237,7 +289,7 @@ async function expectAgentContent(configRoot: string, name: string): Promise<voi
   expect(content).toContain("Do not treat markdown artifacts");
   expect(content).toContain("Do not bypass native Phasekit tool validation");
   expect(content).not.toContain("phasekit_create_run");
-  expect(content).not.toContain("phasekit_complete_task");
+  expect(content).not.toContain("/phasekit:run-phase");
 }
 
 async function withTempDir(run: (path: string) => Promise<void>): Promise<void> {

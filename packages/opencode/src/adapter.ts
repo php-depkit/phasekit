@@ -1,5 +1,6 @@
 import { tool, type Plugin, type ToolDefinition, type ToolResult } from "@opencode-ai/plugin";
 import {
+  createPhaseRun,
   describeCorePackage,
   expandIngestPaths,
   getStatus,
@@ -11,6 +12,7 @@ import {
   type IngestTextInput,
   type NextAction,
   type PhasekitStatus,
+  type CreateRunResult,
 } from "@phasekit/core";
 
 export const opencodePackageName = "@phasekit/opencode" as const;
@@ -39,6 +41,9 @@ export type InitProjectInput = PhasekitToolContext & InitializePlanningStateOpti
 export type StatusInput = PhasekitToolContext & Pick<GetStatusOptions, "runId">;
 export type NextActionInput = StatusInput;
 export type IngestPathsInput = PhasekitToolContext & Pick<ExpandIngestPathsOptions, "inputPaths">;
+export type CreateRunInput = PhasekitToolContext & {
+  phaseId: string;
+};
 export type AdvanceInput = PhasekitToolContext & {
   runId: string;
   targetStage: string;
@@ -53,6 +58,7 @@ export type PhasekitToolHandlers = {
   phasekit_get_status(input?: StatusInput): Promise<PhasekitToolResult<PhasekitStatus>>;
   phasekit_next_action(input?: NextActionInput): Promise<PhasekitToolResult<NextAction>>;
   phasekit_ingest_paths(input: IngestPathsInput): Promise<PhasekitToolResult<IngestTextInput[]>>;
+  phasekit_create_run(input: CreateRunInput): Promise<PhasekitToolResult<CreateRunResult>>;
   phasekit_advance(input: AdvanceInput): Promise<PhasekitToolResult<never>>;
   phasekit_write_artifact(input: WriteArtifactInput): Promise<PhasekitToolResult<never>>;
 };
@@ -86,6 +92,9 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
     }),
     phasekit_ingest_paths: (input) => runTool(async () => {
       return expandIngestPaths({ rootDir: resolveRootDir(input, defaultContext), inputPaths: input.inputPaths });
+    }),
+    phasekit_create_run: (input) => runTool(async () => {
+      return createPhaseRun({ rootDir: resolveRootDir(input, defaultContext), phaseId: input.phaseId });
     }),
     phasekit_advance: () => notImplementedTool("phasekit_advance", "Run advancement is implemented in a later Phasekit phase."),
     phasekit_write_artifact: () => notImplementedTool(
@@ -152,6 +161,21 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
         return toOpenCodeToolResult(
           "Phasekit ingest paths",
           await handlers.phasekit_ingest_paths({ rootDir: args.rootDir, inputPaths: args.inputPaths }),
+        );
+      },
+    }),
+    phasekit_create_run: tool({
+      description: "Create or resume a Phasekit run for one approved phase.",
+      args: {
+        rootDir: schema.string().optional(),
+        phaseId: schema.string(),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult(
+          "Phasekit create run",
+          await handlers.phasekit_create_run({ rootDir: args.rootDir, phaseId: args.phaseId }),
         );
       },
     }),
