@@ -53,6 +53,18 @@ export type {
   StackDeclaration,
 } from "./greenfield/index";
 export {
+  commitChangeKindSchema,
+  commitGateInputSchema,
+  evaluateCommitGate,
+} from "./git/policy";
+export type {
+  CommitChangeKind,
+  CommitGateBlocker,
+  CommitGateBlockerCode,
+  CommitGateDecision,
+  CommitGateInput,
+} from "./git/policy";
+export {
   expandIngestPaths,
 } from "./ingest/paths";
 export type {
