@@ -7,6 +7,7 @@ import {
   expandIngestPaths,
   getStatus,
   initializePlanningState,
+  prepareVerificationScope,
   recordRunBlocker,
   validateTaskPlan,
   type ExpandIngestPathsOptions,
@@ -16,6 +17,7 @@ import {
   type IngestTextInput,
   type NextAction,
   type PhasekitStatus,
+  type PreparedVerifyScope,
   type CreateRunResult,
   type RunState,
   type TaskPlan,
@@ -74,6 +76,9 @@ export type AdvanceInput = PhasekitToolContext & {
   runId: string;
   targetStage: string;
 };
+export type VerifyScopeInput = PhasekitToolContext & {
+  scope: unknown;
+};
 export type WriteArtifactInput = PhasekitToolContext & {
   path: string;
   content: string;
@@ -90,6 +95,7 @@ export type PhasekitToolHandlers = {
   phasekit_complete_task(input: CompleteTaskInput): Promise<PhasekitToolResult<RunState>>;
   phasekit_record_blocker(input: RecordBlockerInput): Promise<PhasekitToolResult<RunState>>;
   phasekit_advance(input: AdvanceInput): Promise<PhasekitToolResult<never>>;
+  phasekit_verify_scope(input: VerifyScopeInput): Promise<PhasekitToolResult<PreparedVerifyScope>>;
   phasekit_write_artifact(input: WriteArtifactInput): Promise<PhasekitToolResult<never>>;
 };
 
@@ -155,6 +161,9 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
       });
     }),
     phasekit_advance: () => notImplementedTool("phasekit_advance", "Run advancement is implemented in a later Phasekit phase."),
+    phasekit_verify_scope: (input) => runTool(async () => {
+      return prepareVerificationScope(input.scope);
+    }),
     phasekit_write_artifact: () => notImplementedTool(
       "phasekit_write_artifact",
       "Artifact writing is implemented in a later Phasekit phase.",
@@ -342,6 +351,18 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
         return toOpenCodeToolResult("Phasekit write artifact", await handlers.phasekit_write_artifact(args));
       },
     }),
+    phasekit_verify_scope: tool({
+      description: "Prepare a Phasekit verification scope without executing commands or mutating repositories.",
+      args: {
+        rootDir: schema.string().optional(),
+        scope: schema.unknown(),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult("Phasekit verify scope", await handlers.phasekit_verify_scope(args));
+      },
+    }),
   };
 }
 
@@ -399,6 +420,13 @@ async function notImplementedTool(toolName: string, message: string): Promise<Ph
 
 function toToolError(error: unknown): PhasekitToolError {
   if (error instanceof Error) {
+    if (error.message.startsWith("Invalid verification-scope.json:")) {
+      return {
+        code: "PHASEKIT_INVALID_VERIFY_SCOPE",
+        message: error.message,
+      };
+    }
+
     return {
       code: "PHASEKIT_TOOL_ERROR",
       message: error.message,

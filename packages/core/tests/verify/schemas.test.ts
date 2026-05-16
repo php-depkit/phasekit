@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   parseStateFile,
+  prepareVerificationScope,
   verifyGroupScopeSchema,
   verificationResultSchema,
   verifyScopeSchema,
@@ -121,6 +122,24 @@ describe("verification scope schemas", () => {
     expect(() => parseStateFile("verification-scope.json", verifyScopeSchema, duplicateGroupScope)).toThrow(
       "Invalid verification-scope.json: phase_ids: Duplicate phase_id 'P7' is not allowed in group verification scope.",
     );
+  });
+
+  test("prepares verification scopes without executing or mutating state", () => {
+    expect(prepareVerificationScope({ kind: "task", phase_id: "P7", plan_id: "plan-1", task_id: "task-1" })).toMatchObject({
+      scope: { kind: "task", phase_id: "P7", plan_id: "plan-1", task_id: "task-1" },
+      scope_id: "task-P7-plan-1-task-1",
+      approved_check_policy: {
+        command_execution: "not_started",
+        run_approved_checks_only: true,
+        missing_checks_require_approval: true,
+      },
+      repair_policy: {
+        focused_repair_only: true,
+        repair_persistence: "not_implemented",
+      },
+    });
+    expect(prepareVerificationScope({ kind: "group", phase_ids: ["P7", "P8"] }).scope_id).toBe("group-P7-P8");
+    expect(prepareVerificationScope({ kind: "all" }).scope_id).toBe("all");
   });
 });
 

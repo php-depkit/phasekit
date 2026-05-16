@@ -7,7 +7,7 @@ export const installPackageName = "@phasekit/install" as const;
 const commandManagedMarker = "<!-- phasekit:managed opencode-command v1 -->";
 const agentManagedMarker = "<!-- phasekit:managed opencode-agent v1 -->";
 
-export type OpenCodeCommandName = "pk-init" | "pk-status" | "pk-next" | "pk-config" | "pk-ingest" | "pk-run-phase";
+export type OpenCodeCommandName = "pk-init" | "pk-status" | "pk-next" | "pk-config" | "pk-ingest" | "pk-run-phase" | "pk-verify";
 export type OpenCodeAgentName =
   | "orchestrator"
   | "context-scout"
@@ -181,6 +181,15 @@ const commandTemplates: CommandTemplate[] = [
       "Use `phasekit_get_status` to report current run state after tool calls and do not claim tasks, complete tasks, record blockers, verify, commit, or mutate `.planning` state from this command markdown.",
     ],
   },
+  {
+    name: "pk-verify",
+    description: "Prepare a scoped Phasekit verification request.",
+    body: [
+      "Call the `phasekit_verify_scope` tool for the current workspace root with the user-provided verification scope as `scope`.",
+      "Return the tool result directly and do not run shell commands, write verification result files, create repair tasks, commit, or mutate repositories from this command markdown.",
+      "If the tool reports a missing or invalid scope, ask for a task, phase, group, or all scope instead of inventing one.",
+    ],
+  },
 ];
 
 const agentTemplates: AgentTemplate[] = [
@@ -229,16 +238,31 @@ const agentTemplates: AgentTemplate[] = [
     name: "reviewer",
     description: "Review scoped Phasekit changes for correctness.",
     responsibility: "Review changed code against the approved plan, requirements, project conventions, and regression risks without marking work complete.",
+    rules: [
+      "Review only the assigned scope and call out any scope expansion as a blocker.",
+      "Do not approve completion when required scoped checks are missing, skipped without approval, or only described in markdown.",
+    ],
   },
   {
     name: "verifier",
     description: "Verify Phasekit requirements and project fit.",
     responsibility: "Run or inspect only approved checks and report verification evidence for native Phasekit tools to record.",
+    rules: [
+      "Use `phasekit_verify_scope` to validate the requested task, phase, group, or all scope before verification work.",
+      "Run or inspect only checks already approved for the validated scope; do not silently add, broaden, or substitute checks.",
+      "When a missing check is needed, propose it for user approval and stop instead of executing it unapproved.",
+      "Verify linked requirements and whole-project integration risks, not only changed files or isolated task output.",
+    ],
   },
   {
     name: "repairer",
     description: "Repair focused Phasekit verification failures.",
     responsibility: "Fix only the specific verified failure or blocker assigned by an approved plan, then return for review and verification.",
+    rules: [
+      "Repair exactly one focused verifier or reviewer failure at a time and stop if the requested fix requires broader product decisions.",
+      "Do not create or persist repair-loop state from this artifact; native Phasekit tools own persistence when that behavior exists.",
+      "After a repair, report changed files and the scoped checks that need review or verification rather than marking the run complete.",
+    ],
   },
   {
     name: "docs-writer",

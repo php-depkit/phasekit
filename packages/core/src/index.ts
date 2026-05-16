@@ -229,6 +229,12 @@ export type {
   VerifyTaskScope,
 } from "./verify/schemas";
 export {
+  prepareVerificationScope,
+} from "./verify/scope";
+export type {
+  PreparedVerifyScope,
+} from "./verify/scope";
+export {
   defaultPhasesState,
   defaultProjectState,
   defaultRequirementsState,

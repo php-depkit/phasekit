@@ -14,7 +14,7 @@ import {
   installPackageName,
 } from "../src/index";
 
-const commandNames = ["pk-init", "pk-status", "pk-next", "pk-config", "pk-ingest", "pk-run-phase"] as const;
+const commandNames = ["pk-init", "pk-status", "pk-next", "pk-config", "pk-ingest", "pk-run-phase", "pk-verify"] as const;
 
 const agentNames = [
   "orchestrator",
@@ -69,6 +69,7 @@ describe("@phasekit/install", () => {
       await expectCommandContent(configRoot, "pk-config", "phasekit_get_status");
       await expectCommandContent(configRoot, "pk-ingest", "phasekit_ingest_paths");
       await expectCommandContent(configRoot, "pk-run-phase", "phasekit_create_run");
+      await expectCommandContent(configRoot, "pk-verify", "phasekit_verify_scope");
     });
   });
 
@@ -111,6 +112,26 @@ describe("@phasekit/install", () => {
       expect(artifact.content).not.toContain("completeRunTask");
       expect(artifact.content).not.toContain("recordRunBlocker");
       expect(artifact.content).not.toContain("/phasekit:run-phase");
+    });
+  });
+
+  test("generates a thin pk-verify command wrapper", async () => {
+    await withTempDir(async (configRoot) => {
+      const artifact = generateOpenCodeCommandArtifacts({ configRoot }).find(({ name }) => name === "pk-verify");
+
+      if (artifact === undefined) {
+        throw new Error("Missing pk-verify generated artifact.");
+      }
+
+      expect(artifact.path).toBe(join(configRoot, "opencode", "commands", "pk-verify.md"));
+      expect(artifact.content).toContain("# /pk-verify");
+      expect(artifact.content).toContain("phasekit_verify_scope");
+      expect(artifact.content).toContain("user-provided verification scope");
+      expect(artifact.content).toContain("task, phase, group, or all scope");
+      expect(artifact.content).not.toContain("verifyScopeSchema");
+      expect(artifact.content).not.toContain("verificationResultSchema");
+      expect(artifact.content).not.toContain("writeRunState");
+      expect(artifact.content).not.toContain("/phasekit:verify");
     });
   });
 
@@ -207,6 +228,29 @@ describe("@phasekit/install", () => {
     });
   });
 
+  test("generates scoped reviewer, verifier, and repairer instructions", async () => {
+    await withTempDir(async (configRoot) => {
+      const artifacts = generateOpenCodeAgentArtifacts({ configRoot });
+      const reviewer = artifacts.find(({ name }) => name === "reviewer");
+      const verifier = artifacts.find(({ name }) => name === "verifier");
+      const repairer = artifacts.find(({ name }) => name === "repairer");
+
+      if (reviewer === undefined || verifier === undefined || repairer === undefined) {
+        throw new Error("Missing reviewer, verifier, or repairer generated artifact.");
+      }
+
+      expect(reviewer.content).toContain("assigned scope");
+      expect(reviewer.content).toContain("required scoped checks");
+      expect(verifier.content).toContain("phasekit_verify_scope");
+      expect(verifier.content).toContain("approved for the validated scope");
+      expect(verifier.content).toContain("propose it for user approval");
+      expect(verifier.content).toContain("whole-project integration risks");
+      expect(repairer.content).toContain("exactly one focused verifier or reviewer failure");
+      expect(repairer.content).toContain("Do not create or persist repair-loop state");
+      expect(repairer.content).toContain("report changed files and the scoped checks");
+    });
+  });
+
   test("generated command and agent artifacts avoid old command names and core run logic", () => {
     const artifacts = [
       ...generateOpenCodeCommandArtifacts({ configRoot: "/config" }),
@@ -216,6 +260,7 @@ describe("@phasekit/install", () => {
     for (const artifact of artifacts) {
       expect(artifact.content).not.toContain("/phasekit:run-phase");
       expect(artifact.content).not.toContain("/phasekit:ingest");
+      expect(artifact.content).not.toContain("/phasekit:verify");
       expect(artifact.content).not.toContain("claimRunTask");
       expect(artifact.content).not.toContain("completeRunTask");
       expect(artifact.content).not.toContain("recordRunBlocker");
@@ -273,6 +318,7 @@ async function expectCommandContent(configRoot: string, name: string, toolName: 
   expect(content).not.toContain("initializePlanningState");
   expect(content).not.toContain("getStatus({");
   expect(content).not.toContain("/phasekit:run-phase");
+  expect(content).not.toContain("/phasekit:verify");
 }
 
 async function expectAgentContent(configRoot: string, name: string): Promise<void> {
@@ -290,6 +336,7 @@ async function expectAgentContent(configRoot: string, name: string): Promise<voi
   expect(content).toContain("Do not bypass native Phasekit tool validation");
   expect(content).not.toContain("phasekit_create_run");
   expect(content).not.toContain("/phasekit:run-phase");
+  expect(content).not.toContain("/phasekit:verify");
 }
 
 async function withTempDir(run: (path: string) => Promise<void>): Promise<void> {
