@@ -81,6 +81,9 @@ export const runTaskSchema = z
     id: z.string().min(1),
     owner_agent_id: z.string().min(1).optional(),
     started_at: z.string().datetime().optional(),
+    completed_at: z.string().datetime().optional(),
+    completed_checks: z.array(z.string().min(1)).optional(),
+    changed_files: z.array(z.string().min(1)).optional(),
   })
   .strict();
 

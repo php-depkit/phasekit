@@ -101,6 +101,22 @@ export type {
   TaskPlanValidatorOptions,
 } from "./runs/tasks";
 export {
+  claimRunTask,
+  completeRunTask,
+  recordRunBlocker,
+  recordRunBlockerInputSchema,
+  taskCompletionCheckResultSchema,
+  taskCompletionEvidenceSchema,
+} from "./runs/tools";
+export type {
+  ClaimRunTaskOptions,
+  CompleteRunTaskOptions,
+  RecordRunBlockerInput,
+  RecordRunBlockerOptions,
+  TaskCompletionCheckResult,
+  TaskCompletionEvidence,
+} from "./runs/tools";
+export {
   toPhasesState,
   validateGrillMeQuestionAnswer,
   validateGrillMeQuestion,
