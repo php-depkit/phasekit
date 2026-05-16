@@ -87,6 +87,20 @@ export type {
   CreateRunResult,
 } from "./runs/persistence";
 export {
+  isBehaviorAddingTask,
+  taskPlanCheckSchema,
+  taskPlanSchema,
+  taskPlanTaskSchema,
+  taskPlanValidatorOptionsSchema,
+  validateTaskPlan,
+} from "./runs/tasks";
+export type {
+  TaskPlan,
+  TaskPlanCheck,
+  TaskPlanTask,
+  TaskPlanValidatorOptions,
+} from "./runs/tasks";
+export {
   toPhasesState,
   validateGrillMeQuestionAnswer,
   validateGrillMeQuestion,
