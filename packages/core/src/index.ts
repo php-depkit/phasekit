@@ -38,6 +38,7 @@ export type {
   DetectGreenfieldProjectOptions,
   GreenfieldDetection,
   GreenfieldRepositoryInput,
+  StackQuestionAnswer,
   StackDecision,
   StackDecisionBlocker,
   StackDeclaration,

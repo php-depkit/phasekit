@@ -75,6 +75,13 @@ export interface ConfirmedStackContextBundle {
   verification: ConfirmedStackContext;
 }
 
+export type StackQuestionAnswer = GrillMeQuestionAnswer | {
+  question: GrillMeQuestionAnswer["question"];
+  requirement_ids: readonly string[];
+  selected_recommended_option: NonNullable<GrillMeQuestionAnswer["selected_recommended_option"]>;
+  custom_answer_text: string;
+};
+
 export function detectGreenfieldProject(options: DetectGreenfieldProjectOptions = {}): GreenfieldDetection {
   if (hasText(options.project?.stack)) {
     return { isGreenfield: false, reason: "confirmed-stack" };
@@ -94,12 +101,26 @@ export function detectGreenfieldProject(options: DetectGreenfieldProjectOptions 
 }
 
 export function decideStack(options: DecideStackOptions): StackDecision {
-  if (hasText(options.project?.stack)) {
-    return confirmStackDecision(options.project?.stack ?? "", "project");
-  }
-
   const declarations = normalizeStackDeclarations(options.repository?.stackDeclarations ?? []);
   const declarationStacks = uniqueNormalizedStacks(declarations);
+
+  if (hasText(options.project?.stack)) {
+    const projectStack = options.project.stack.trim();
+    const conflictingDeclarations = declarations.filter(
+      (declaration) => declaration.stack.toLowerCase() !== projectStack.toLowerCase(),
+    );
+
+    if (conflictingDeclarations.length > 0) {
+      return {
+        kind: "blocker",
+        reason: `Confirmed project stack ${projectStack} conflicts with declared stack signals: ${uniqueNormalizedStacks(conflictingDeclarations).join(", ")}.`,
+        next_step: "Ask the user which stack should be canonical before planning implementation.",
+        conflictingStacks: conflictingDeclarations,
+      };
+    }
+
+    return confirmStackDecision(projectStack, "project");
+  }
 
   if (declarationStacks.length > 1) {
     return {
@@ -120,7 +141,11 @@ export function decideStack(options: DecideStackOptions): StackDecision {
   }
 
   if (!options.greenfield.recommend_stack) {
-    return { kind: "none", reason: "recommendation-disabled" };
+    return {
+      kind: "blocker",
+      reason: "Stack recommendation is disabled and no stack is confirmed for this greenfield project.",
+      next_step: "Ask the user to provide the exact stack to confirm before planning implementation.",
+    };
   }
 
   if (!hasText(options.recommendedStack)) {
@@ -175,18 +200,35 @@ export function createStackQuestion(recommendedStack: string): GrillMeQuestion {
   };
 }
 
-export function confirmStackQuestionAnswer(answer: GrillMeQuestionAnswer): ConfirmedStackDecision | StackDecisionBlocker {
-  if (answer.selected_recommended_option !== undefined && answer.selected_recommended_option.id !== "approve-recommended-stack") {
+export function confirmStackQuestionAnswer(answer: StackQuestionAnswer): ConfirmedStackDecision | StackDecisionBlocker {
+  const selectedOption = answer.selected_recommended_option;
+  const customStack = answer.custom_answer_text;
+
+  if (selectedOption !== undefined && !isKnownStackQuestionOption(selectedOption.id)) {
     return {
       kind: "blocker",
-      reason: `Stack question option ${answer.selected_recommended_option.id} requires a custom stack answer before confirmation.`,
+      reason: `Unknown stack question option ${selectedOption.id}.`,
+      next_step: "Ask the user to choose a known stack option or provide the exact stack to confirm.",
+    };
+  }
+
+  if (selectedOption !== undefined && selectedOption.id !== "approve-recommended-stack" && customStack === undefined) {
+    return {
+      kind: "blocker",
+      reason: `Stack question option ${selectedOption.id} requires a custom stack answer before confirmation.`,
       next_step: "Ask the user to provide the exact stack to confirm.",
     };
   }
 
-  const stack = answer.selected_recommended_option?.text ?? answer.custom_answer_text;
+  const stack = customStack ?? selectedOption?.text;
 
   return confirmStackDecision(stack ?? "", "answer");
+}
+
+function isKnownStackQuestionOption(optionId: string): boolean {
+  return optionId === "approve-recommended-stack"
+    || optionId === "edit-recommended-stack"
+    || optionId === "use-different-stack";
 }
 
 export function confirmStackDecision(

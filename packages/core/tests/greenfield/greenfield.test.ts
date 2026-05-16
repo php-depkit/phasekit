@@ -81,6 +81,27 @@ describe("greenfield detection", () => {
     });
   });
 
+  test("blocks when confirmed project stack conflicts with repository declarations", () => {
+    expect(
+      decideStack({
+        project: { stack: "Bun + TypeScript" },
+        repository: {
+          stackDeclarations: [
+            { source: "package.json#phasekit.stack", stack: "Next.js + TypeScript" },
+          ],
+        },
+        greenfield: recommendStack,
+      }),
+    ).toEqual({
+      kind: "blocker",
+      reason: "Confirmed project stack Bun + TypeScript conflicts with declared stack signals: next.js + typescript.",
+      next_step: "Ask the user which stack should be canonical before planning implementation.",
+      conflictingStacks: [
+        { source: "package.json#phasekit.stack", stack: "Next.js + TypeScript" },
+      ],
+    });
+  });
+
   test("uses a single existing stack declaration", () => {
     const declarations: StackDeclaration[] = [
       { source: "package.json#phasekit.stack", stack: "Bun + TypeScript" },
@@ -118,7 +139,7 @@ describe("greenfield detection", () => {
     });
   });
 
-  test("does not silently assume a stack when recommendation is disabled", () => {
+  test("requires an explicit stack when recommendation is disabled", () => {
     expect(
       decideStack({
         repository: { implementationFiles: [], stackDeclarations: [] },
@@ -126,8 +147,9 @@ describe("greenfield detection", () => {
         recommendedStack: "Next.js + TypeScript",
       }),
     ).toEqual({
-      kind: "none",
-      reason: "recommendation-disabled",
+      kind: "blocker",
+      reason: "Stack recommendation is disabled and no stack is confirmed for this greenfield project.",
+      next_step: "Ask the user to provide the exact stack to confirm before planning implementation.",
     });
   });
 
@@ -277,6 +299,50 @@ describe("stack confirmation payloads", () => {
         next_step: "Ask the user to provide the exact stack to confirm.",
       });
     }
+  });
+
+  test("confirms edit or different-stack choices when custom stack text is provided", () => {
+    for (const option of ["edit-recommended-stack", "use-different-stack"]) {
+      expect(
+        confirmStackQuestionAnswer({
+          question: {
+            id: "greenfield-stack",
+            prompt: "Which tech stack should Phasekit use for this greenfield project?",
+          },
+          requirement_ids: ["greenfield-stack"],
+          selected_recommended_option: {
+            id: option,
+            text: "Use a different stack",
+          },
+          custom_answer_text: "SvelteKit + TypeScript",
+        }),
+      ).toEqual({
+        kind: "confirmed",
+        stack: "SvelteKit + TypeScript",
+        project: { stack: "SvelteKit + TypeScript" },
+        source: "answer",
+      });
+    }
+  });
+
+  test("blocks unknown stack question options", () => {
+    expect(
+      confirmStackQuestionAnswer({
+        question: {
+          id: "greenfield-stack",
+          prompt: "Which tech stack should Phasekit use for this greenfield project?",
+        },
+        requirement_ids: ["greenfield-stack"],
+        selected_recommended_option: {
+          id: "unexpected-option",
+          text: "Surprise stack",
+        },
+      }),
+    ).toEqual({
+      kind: "blocker",
+      reason: "Unknown stack question option unexpected-option.",
+      next_step: "Ask the user to choose a known stack option or provide the exact stack to confirm.",
+    });
   });
 
   test("propagates confirmed stack into downstream contexts", () => {
