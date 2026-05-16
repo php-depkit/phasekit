@@ -141,7 +141,7 @@ function getNextRequirementNumber(requirements: readonly Requirement[]): number 
 
 function validateExistingRequirements(requirements: readonly Requirement[]): void {
   const seenIds = new Set<string>();
-  const seenIdentities = new Set<string>();
+  const seenSourceMappings = new Set<string>();
 
   for (const requirement of requirements) {
     if (!requirementIdPattern.test(requirement.id)) {
@@ -159,21 +159,29 @@ function validateExistingRequirements(requirements: readonly Requirement[]): voi
       }
     }
 
-    const identity = toRequirementIdentity(requirement);
-    if (seenIdentities.has(identity)) {
+    const sourceMapping = toSourcesIdentity(requirement.sources);
+    if (seenSourceMappings.has(sourceMapping)) {
       throw new Error(`Duplicate existing source requirement mapping for ${requirement.id}.`);
     }
-    seenIdentities.add(identity);
+    seenSourceMappings.add(sourceMapping);
   }
 }
 
 function validateCandidates(candidates: readonly SourceRequirementCandidate[]): void {
+  const seenSourceMappings = new Set<string>();
+
   for (const candidate of candidates) {
     for (const source of candidate.sources) {
       if (source.locator.trim() === "") {
         throw new Error(`Source requirement candidate for ${source.path} must include a locator.`);
       }
     }
+
+    const sourceMapping = toSourcesIdentity(candidate.sources);
+    if (seenSourceMappings.has(sourceMapping)) {
+      throw new Error(`Duplicate source requirement candidate mapping for ${sourceMapping}.`);
+    }
+    seenSourceMappings.add(sourceMapping);
   }
 }
 

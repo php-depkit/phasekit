@@ -192,4 +192,37 @@ describe("source requirement ID assignment", () => {
       }),
     ).toThrow("Existing requirement REQ-1 source docs/prd.md must include a locator.");
   });
+
+  test("rejects duplicate existing source mappings with different text", () => {
+    expect(() =>
+      assignSourceRequirementIds({
+        existingState: {
+          requirements: [
+            {
+              id: "REQ-1",
+              text: "A user can ingest a PRD.",
+              sources: [{ path: "docs/prd.md", locator: "line:1" }],
+            },
+            {
+              id: "REQ-2",
+              text: "A user can ingest multiple PRDs.",
+              sources: [{ path: "docs/prd.md", locator: "line:1" }],
+            },
+          ],
+        },
+        candidates: [candidate("A user can ingest a PRD.", "line:1")],
+      }),
+    ).toThrow("Duplicate existing source requirement mapping for REQ-2.");
+  });
+
+  test("rejects duplicate candidate source mappings with different text", () => {
+    expect(() =>
+      assignSourceRequirementIds({
+        candidates: [
+          candidate("A user can ingest a PRD.", "line:1"),
+          candidate("A user can ingest multiple PRDs.", "line:1"),
+        ],
+      }),
+    ).toThrow('Duplicate source requirement candidate mapping for [{"path":"docs/prd.md","locator":"line:1"}].');
+  });
 });
