@@ -135,7 +135,41 @@ describe("verification command discovery", () => {
         command: "bun run lint",
         source: "discovered",
         requires_confirmation: true,
-        confirmation_reasons: ["discovered package script contains shell control syntax"],
+        confirmation_reasons: [
+          "discovered package script contains shell control syntax",
+          "discovered package script appears to mutate files",
+        ],
+      },
+    ]);
+  });
+
+  test("requires confirmation for mutating discovered commands", () => {
+    expect(
+      discoverVerificationCommands({
+        packageMetadata: [
+          {
+            packageManager: "bun",
+            scripts: {
+              lint: "eslint . --fix",
+              build: "rm dist",
+            },
+          },
+        ],
+      }),
+    ).toEqual([
+      {
+        kind: "lint",
+        command: "bun run lint",
+        source: "discovered",
+        requires_confirmation: true,
+        confirmation_reasons: ["discovered package script appears to mutate files"],
+      },
+      {
+        kind: "build",
+        command: "bun run build",
+        source: "discovered",
+        requires_confirmation: true,
+        confirmation_reasons: ["discovered package script appears to mutate files"],
       },
     ]);
   });

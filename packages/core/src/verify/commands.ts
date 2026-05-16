@@ -37,6 +37,7 @@ interface DiscoveredScript {
 }
 
 const unsafeScriptPattern = /[;&|`$<>\n\r]/;
+const mutatingScriptPattern = /(?:^|\s)(?:rm\b|rimraf\b|del\b|eslint\b[^\n\r]*\s--fix\b|prettier\b[^\n\r]*\s--write\b|tsc\b[^\n\r]*\s--build\b)/;
 
 function configuredCommand(
   kind: VerificationCommandKind,
@@ -69,7 +70,7 @@ function discoverScript(
     scriptCandidates(kind, metadata.scripts).map((scriptName) => ({
       command: commandForScript(metadata.packageManager, scriptName),
       scriptName,
-        scriptBody: metadata.scripts[scriptName] ?? "",
+      scriptBody: metadata.scripts[scriptName] ?? "",
       })),
   ).sort((left, right) => {
     const commandOrder = left.command.localeCompare(right.command);
@@ -114,6 +115,10 @@ function discoveredCommand(discovered: DiscoveredScript): VerificationCommand {
 
   if (unsafeScriptPattern.test(discovered.scriptBody)) {
     confirmation_reasons.push("discovered package script contains shell control syntax");
+  }
+
+  if (mutatingScriptPattern.test(discovered.scriptBody)) {
+    confirmation_reasons.push("discovered package script appears to mutate files");
   }
 
   if (unsafeScriptPattern.test(discovered.command)) {
