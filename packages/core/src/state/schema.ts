@@ -74,7 +74,23 @@ export const rulesStateSchema = z
   .object({
     rules: z.array(ruleSchema),
   })
-  .strict();
+  .strict()
+  .superRefine((state, context) => {
+    const seenRuleIds = new Set<string>();
+
+    for (const [index, rule] of state.rules.entries()) {
+      if (seenRuleIds.has(rule.id)) {
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["rules", index, "id"],
+          message: `Duplicate rule id "${rule.id}".`,
+        });
+        continue;
+      }
+
+      seenRuleIds.add(rule.id);
+    }
+  });
 
 export const runTaskSchema = z
   .object({
@@ -128,5 +144,6 @@ export type Requirement = z.infer<typeof requirementSchema>;
 export type RequirementsState = z.infer<typeof requirementsStateSchema>;
 export type PhaseStatus = z.infer<typeof phaseStatusSchema>;
 export type PhasesState = z.infer<typeof phasesStateSchema>;
+export type Rule = z.infer<typeof ruleSchema>;
 export type RulesState = z.infer<typeof rulesStateSchema>;
 export type RunState = z.infer<typeof runStateSchema>;

@@ -84,6 +84,17 @@ export type {
   SourceRequirementSource,
 } from "./ingest/requirements";
 export {
+  addRule,
+  editRule,
+  removeRule,
+  validateRulesState,
+} from "./rules/index";
+export type {
+  AddRuleOptions,
+  EditRuleOptions,
+  RemoveRuleOptions,
+} from "./rules/index";
+export {
   allowedRunStageTransitions,
   getAllowedNextRunStages,
   runBlockerSchema,
@@ -276,6 +287,7 @@ export type {
   ProjectState,
   Requirement,
   RequirementsState,
+  Rule,
   RulesState,
   RunState,
   SourceReference,
