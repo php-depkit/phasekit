@@ -4,17 +4,16 @@ import {
   claimRunTask,
   completeRunTask,
   describeCorePackage,
-  expandIngestPaths,
   getStatus,
+  ingestProjectInputs,
   initializePlanningState,
   prepareVerificationScope,
   recordRunBlocker,
   validateTaskPlan,
-  type ExpandIngestPathsOptions,
   type GetStatusOptions,
+  type IngestProjectResult,
   type InitializePlanningStateOptions,
   type InitializePlanningStateResult,
-  type IngestTextInput,
   type NextAction,
   type PhasekitStatus,
   type PreparedVerifyScope,
@@ -48,7 +47,9 @@ export type PhasekitToolContext = {
 export type InitProjectInput = PhasekitToolContext & InitializePlanningStateOptions;
 export type StatusInput = PhasekitToolContext & Pick<GetStatusOptions, "runId">;
 export type NextActionInput = StatusInput;
-export type IngestPathsInput = PhasekitToolContext & Pick<ExpandIngestPathsOptions, "inputPaths">;
+export type IngestPathsInput = PhasekitToolContext & {
+  inputPaths: string[];
+};
 export type CreateRunInput = PhasekitToolContext & {
   phaseId: string;
 };
@@ -88,7 +89,7 @@ export type PhasekitToolHandlers = {
   phasekit_init_project(input?: InitProjectInput): Promise<PhasekitToolResult<InitializePlanningStateResult>>;
   phasekit_get_status(input?: StatusInput): Promise<PhasekitToolResult<PhasekitStatus>>;
   phasekit_next_action(input?: NextActionInput): Promise<PhasekitToolResult<NextAction>>;
-  phasekit_ingest_paths(input: IngestPathsInput): Promise<PhasekitToolResult<IngestTextInput[]>>;
+  phasekit_ingest_paths(input: IngestPathsInput): Promise<PhasekitToolResult<IngestProjectResult>>;
   phasekit_create_run(input: CreateRunInput): Promise<PhasekitToolResult<CreateRunResult>>;
   phasekit_validate_plan(input: ValidatePlanInput): Promise<PhasekitToolResult<TaskPlan>>;
   phasekit_claim_task(input: ClaimTaskInput): Promise<PhasekitToolResult<RunState>>;
@@ -127,7 +128,7 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
       return status.next_action;
     }),
     phasekit_ingest_paths: (input) => runTool(async () => {
-      return expandIngestPaths({ rootDir: resolveRootDir(input, defaultContext), inputPaths: input.inputPaths });
+      return ingestProjectInputs({ rootDir: resolveRootDir(input, defaultContext), inputPaths: input.inputPaths });
     }),
     phasekit_create_run: (input) => runTool(async () => {
       return createPhaseRun({ rootDir: resolveRootDir(input, defaultContext), phaseId: input.phaseId });

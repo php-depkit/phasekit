@@ -81,6 +81,28 @@ async function writePhases(
   );
 }
 
+async function writeProject(rootDir: string, project: { stack?: string }): Promise<void> {
+  await writeTextFile(rootDir, ".planning/project.json", `${JSON.stringify(project, null, 2)}\n`);
+}
+
+async function writeRequirements(rootDir: string, requirements: { id: string; text: string; locator: string }[]): Promise<void> {
+  await writeTextFile(
+    rootDir,
+    ".planning/requirements.json",
+    `${JSON.stringify(
+      {
+        requirements: requirements.map((requirement) => ({
+          id: requirement.id,
+          text: requirement.text,
+          sources: [{ path: "docs/prd.md", locator: requirement.locator }],
+        })),
+      },
+      null,
+      2,
+    )}\n`,
+  );
+}
+
 async function writeRun(rootDir: string): Promise<void> {
   await writeTextFile(
     rootDir,
@@ -183,11 +205,29 @@ describe("@phasekit/opencode", () => {
     });
   });
 
-  test("ingests multiple paths through core ingest behavior", async () => {
+  test("ingests multiple paths through core ingest behavior and writes planning state", async () => {
     await withTempDir(async (rootDir) => {
+      await writeProject(rootDir, { stack: "Bun + TypeScript" });
+      await writeRequirements(rootDir, []);
+      await writePhases(rootDir, []);
       await writeTextFile(rootDir, "docs/zeta.md", "Zeta\n");
       await writeTextFile(rootDir, "docs/alpha.txt", "Alpha\n");
-      await writeTextFile(rootDir, "README.md", "Read me\n");
+      await writeTextFile(
+        rootDir,
+        "README.md",
+        [
+          "# Product",
+          "",
+          "**Success Criteria:**",
+          "- Read me.",
+          "",
+          "**Story 1: Inputs**",
+          "Acceptance criteria:",
+          "- Alpha.",
+          "- Zeta.",
+          "",
+        ].join("\n"),
+      );
 
       const tools = createPhasekitToolHandlers({ rootDir });
       const result = await tools.phasekit_ingest_paths({ inputPaths: ["docs/zeta.md", "README.md", "docs"] });
@@ -197,8 +237,20 @@ describe("@phasekit/opencode", () => {
         throw new Error(result.error.message);
       }
 
-      expect(result.data.map((input) => input.relativePath)).toEqual(["README.md", "docs/alpha.txt", "docs/zeta.md"]);
-      expect(result.data.map((input) => input.text)).toEqual(["Read me\n", "Alpha\n", "Zeta\n"]);
+      expect(result.data.inputs.map((input) => input.relativePath)).toEqual(["README.md", "docs/alpha.txt", "docs/zeta.md"]);
+      expect(result.data.requirements.requirements.map((requirement) => requirement.text)).toEqual([
+        "Success Criteria: Read me.",
+        "Inputs: Alpha.",
+        "Inputs: Zeta.",
+        "Ingested Requirements: Alpha",
+        "Ingested Requirements: Zeta",
+      ]);
+      expect(result.data.phases.phases.map((phase) => phase.id)).toEqual([
+        "INGEST-success-criteria",
+        "INGEST-inputs",
+        "INGEST-ingested-requirements-docs-alpha",
+        "INGEST-ingested-requirements-docs-zeta",
+      ]);
     });
   });
 
@@ -387,9 +439,21 @@ describe("@phasekit/opencode", () => {
       const init = await tools.phasekit_init_project.execute({}, context);
       const status = await tools.phasekit_get_status.execute({}, context);
       await writeTextFile(rootDir, "docs/prd.md", "Requirement\n");
-      await writePhases(rootDir, [{ id: "P6-T4", status: "pending" }]);
       const ingest = await tools.phasekit_ingest_paths.execute({ inputPaths: ["docs/prd.md"] }, context);
-      const run = await tools.phasekit_create_run.execute({ phaseId: "P6-T4" }, context);
+      const ingestResult = parseToolOutput(ingest) as {
+        ok: boolean;
+        data?: {
+          phases: {
+            phases: { id: string }[];
+          };
+        };
+      };
+
+      if (!ingestResult.ok || ingestResult.data === undefined) {
+        throw new Error("Expected ingest tool to produce phase state.");
+      }
+
+      const run = await tools.phasekit_create_run.execute({ phaseId: ingestResult.data.phases.phases[0]?.id ?? "missing" }, context);
       const verify = await tools.phasekit_verify_scope.execute({ scope: { kind: "all" } }, context);
 
       expect(parseToolOutput(init)).toMatchObject({ ok: true });
@@ -402,16 +466,49 @@ describe("@phasekit/opencode", () => {
       });
       expect(parseToolOutput(ingest)).toMatchObject({
         ok: true,
-        data: [{ relativePath: "docs/prd.md", text: "Requirement\n" }],
+        data: {
+          inputs: [{ relativePath: "docs/prd.md", text: "Requirement\n" }],
+        },
       });
       expect(parseToolOutput(run)).toMatchObject({
         ok: true,
-        data: { resumed: false, run: { id: "phase-P6-T4", current_phase: "P6-T4" } },
+        data: { resumed: false, run: { current_phase: "INGEST-ingested-requirements" } },
       });
       expect(parseToolOutput(verify)).toMatchObject({
         ok: true,
         data: { scope: { kind: "all" }, scope_id: "all" },
       });
+    });
+  });
+
+  test("ingests the Phasekit PRD through the OpenCode tool path deterministically", async () => {
+    await withTempDir(async (rootDir) => {
+      const prdText = await Bun.file(join(process.cwd(), ".planning", "PHASEKIT-PRD.md")).text();
+      const tools = createPhasekitToolHandlers({ rootDir });
+
+      await tools.phasekit_init_project();
+      await writeTextFile(rootDir, ".planning/PHASEKIT-PRD.md", prdText);
+
+      const first = await tools.phasekit_ingest_paths({ inputPaths: [".planning/PHASEKIT-PRD.md"] });
+      const second = await tools.phasekit_ingest_paths({ inputPaths: [".planning/PHASEKIT-PRD.md"] });
+
+      expect(first.ok).toBe(true);
+      expect(second.ok).toBe(true);
+      if (!first.ok || !second.ok) {
+        throw new Error("Expected PRD ingest to succeed through the OpenCode tool path.");
+      }
+
+      expect(second.data).toEqual(first.data);
+      expect(first.data.phases.phases.map((phase) => phase.id)).toEqual([
+        "INGEST-success-criteria",
+        "INGEST-initialize-phasekit",
+        "INGEST-ingest-product-intent",
+        "INGEST-add-one-phase",
+        "INGEST-run-a-phase",
+        "INGEST-resume-interrupted-work",
+        "INGEST-verify-whole-project-fit",
+        "INGEST-generate-project-docs",
+      ]);
     });
   });
 

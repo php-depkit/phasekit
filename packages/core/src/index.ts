@@ -113,6 +113,15 @@ export type {
   IngestTextInput,
 } from "./ingest/paths";
 export {
+  extractRequirementsFromSupportedText,
+  ingestProjectInputs,
+  sliceRequirementsIntoPhases,
+} from "./ingest/project";
+export type {
+  IngestProjectOptions,
+  IngestProjectResult,
+} from "./ingest/project";
+export {
   assignSourceRequirementIds,
   extractSourceRequirements,
 } from "./ingest/requirements";
