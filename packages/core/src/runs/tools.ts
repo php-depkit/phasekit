@@ -2,7 +2,7 @@ import { z } from "zod";
 
 import { readRunState, writeRunState } from "./persistence";
 import { type TaskPlan, type TaskPlanCheck, type TaskPlanTask, taskPlanSchema } from "./tasks";
-import { runBlockerSchema, type RunBlocker } from "./lifecycle";
+import { runBlockerSchema, type RunBlocker, type RunStage, validateRunStageTransition } from "./lifecycle";
 import type { RunState } from "../state/schema";
 
 export const taskCompletionCheckResultSchema = z
@@ -65,6 +65,43 @@ export type RecordRunBlockerOptions = {
   blocker: unknown;
   now?: Date;
 };
+
+export type AdvanceRunStageOptions = {
+  rootDir?: string;
+  runId: string;
+  targetStage: unknown;
+  now?: Date;
+};
+
+export async function advanceRunStage(options: AdvanceRunStageOptions): Promise<RunState> {
+  const rootDir = options.rootDir ?? process.cwd();
+  const run = await readRunState(rootDir, options.runId);
+
+  if (run.current_stage === "complete") {
+    throw new Error(`Cannot advance run ${run.id}: run is already complete.`);
+  }
+
+  if (run.blockers.length > 0) {
+    throw new Error(`Cannot advance run ${run.id}: resolve blockers before advancing stages.`);
+  }
+
+  const transition = validateRunStageTransition({
+    from: run.current_stage,
+    to: options.targetStage,
+  });
+  const transitionedAt = (options.now ?? new Date()).toISOString();
+  const nextRun = {
+    ...run,
+    current_stage: transition.to as RunStage,
+    last_successful_stage_transition: {
+      ...transition,
+      at: transitionedAt,
+    },
+  } satisfies RunState;
+
+  await writeRunState(rootDir, nextRun);
+  return nextRun;
+}
 
 export async function claimRunTask(options: ClaimRunTaskOptions): Promise<RunState> {
   const rootDir = options.rootDir ?? process.cwd();

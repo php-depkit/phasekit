@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
@@ -372,22 +372,60 @@ describe("@phasekit/opencode", () => {
     });
   });
 
-  test("keeps future tools structured without duplicating unavailable core behavior", async () => {
-    const tools = createPhasekitToolHandlers();
+  test("advances runs and writes approved artifacts through core-backed tools", async () => {
+    await withTempDir(async (rootDir) => {
+      await withTempDir(async (configRoot) => {
+        const tools = createPhasekitToolHandlers({ rootDir, configRoot });
+        await tools.phasekit_init_project();
+        await writeRun(rootDir);
 
-    await expect(tools.phasekit_advance({ runId: "run-1", targetStage: "review" })).resolves.toEqual({
-      ok: false,
-      error: {
-        code: "PHASEKIT_TOOL_NOT_IMPLEMENTED",
-        message: "phasekit_advance: Run advancement is implemented in a later Phasekit phase.",
-      },
+        const advanced = await tools.phasekit_advance({ runId: "phase-P6-T4", targetStage: "review" });
+        const written = await tools.phasekit_write_artifact({
+          path: "opencode/commands/pk-status.md",
+          content: "<!-- phasekit:managed opencode-command v1 -->\nmanaged\n",
+        });
+
+        expect(advanced).toMatchObject({
+          ok: true,
+          data: {
+            current_stage: "review",
+            last_successful_stage_transition: {
+              from: "execution",
+              to: "review",
+            },
+          },
+        });
+        expect(written).toEqual({ ok: true, data: { path: "opencode/commands/pk-status.md" } });
+        expect(await readFile(join(configRoot, "opencode", "commands", "pk-status.md"), "utf8")).toBe(
+          "<!-- phasekit:managed opencode-command v1 -->\nmanaged\n",
+        );
+      });
     });
-    await expect(tools.phasekit_write_artifact({ path: "PROJECT.md", content: "# Project" })).resolves.toEqual({
-      ok: false,
-      error: {
-        code: "PHASEKIT_TOOL_NOT_IMPLEMENTED",
-        message: "phasekit_write_artifact: Artifact writing is implemented in a later Phasekit phase.",
-      },
+  });
+
+  test("returns structured actionable errors for invalid advancement and artifact writes", async () => {
+    await withTempDir(async (rootDir) => {
+      const tools = createPhasekitToolHandlers({ rootDir });
+      await tools.phasekit_init_project();
+      await writeRun(rootDir);
+
+      const skipped = await tools.phasekit_advance({ runId: "phase-P6-T4", targetStage: "verification" });
+      const unapprovedPath = await tools.phasekit_write_artifact({ path: "docs/guide.md", content: "# no" });
+
+      expect(skipped).toEqual({
+        ok: false,
+        error: {
+          code: "PHASEKIT_TOOL_ERROR",
+          message: 'Invalid run stage transition from "execution" to "verification": expected next stage: review.',
+        },
+      });
+      expect(unapprovedPath).toEqual({
+        ok: false,
+        error: {
+          code: "PHASEKIT_TOOL_ERROR",
+          message: 'Refusing to write artifact "docs/guide.md": path is not an approved generated artifact location.',
+        },
+      });
     });
   });
 

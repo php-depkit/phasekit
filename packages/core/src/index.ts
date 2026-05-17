@@ -183,6 +183,7 @@ export type {
   TaskPlanValidatorOptions,
 } from "./runs/tasks";
 export {
+  advanceRunStage,
   claimRunTask,
   completeRunTask,
   recordRunBlocker,
@@ -191,6 +192,7 @@ export {
   taskCompletionEvidenceSchema,
 } from "./runs/tools";
 export type {
+  AdvanceRunStageOptions,
   ClaimRunTaskOptions,
   CompleteRunTaskOptions,
   RecordRunBlockerInput,
@@ -198,6 +200,14 @@ export type {
   TaskCompletionCheckResult,
   TaskCompletionEvidence,
 } from "./runs/tools";
+export {
+  writeGeneratedArtifact,
+} from "./artifacts/write";
+export type {
+  ManagedConfigArtifactPolicy,
+  WriteGeneratedArtifactOptions,
+  WriteGeneratedArtifactResult,
+} from "./artifacts/write";
 export {
   toPhasesState,
   validateGrillMeQuestionAnswer,

@@ -1,6 +1,7 @@
 import { tool, type Plugin, type ToolDefinition, type ToolResult } from "@opencode-ai/plugin";
 import {
   createPhaseRun,
+  advanceRunStage,
   claimRunTask,
   completeRunTask,
   describeCorePackage,
@@ -10,19 +11,39 @@ import {
   prepareVerificationScope,
   recordRunBlocker,
   validateTaskPlan,
+  writeGeneratedArtifact,
   type GetStatusOptions,
   type IngestProjectResult,
   type InitializePlanningStateOptions,
   type InitializePlanningStateResult,
+  type ManagedConfigArtifactPolicy,
   type NextAction,
   type PhasekitStatus,
   type PreparedVerifyScope,
   type CreateRunResult,
   type RunState,
   type TaskPlan,
+  type WriteGeneratedArtifactResult,
 } from "@phasekit/core";
 
 export const opencodePackageName = "@phasekit/opencode" as const;
+const opencodeCommandManagedMarker = "<!-- phasekit:managed opencode-command v1 -->";
+const opencodeAgentManagedMarker = "<!-- phasekit:managed opencode-agent v1 -->";
+
+export function createOpenCodeArtifactPolicy(): ManagedConfigArtifactPolicy[] {
+  return [
+    {
+      directory: "opencode/commands",
+      fileNamePattern: /^pk-[a-z0-9-]+\.md$/,
+      managedMarker: opencodeCommandManagedMarker,
+    },
+    {
+      directory: "opencode/agents",
+      fileNamePattern: /^[a-z0-9-]+\.md$/,
+      managedMarker: opencodeAgentManagedMarker,
+    },
+  ];
+}
 
 export type PhasekitToolError = {
   code: string;
@@ -42,6 +63,7 @@ export type PhasekitToolResult<T> =
 
 export type PhasekitToolContext = {
   rootDir?: string;
+  configRoot?: string;
 };
 
 export type InitProjectInput = PhasekitToolContext & InitializePlanningStateOptions;
@@ -95,9 +117,9 @@ export type PhasekitToolHandlers = {
   phasekit_claim_task(input: ClaimTaskInput): Promise<PhasekitToolResult<RunState>>;
   phasekit_complete_task(input: CompleteTaskInput): Promise<PhasekitToolResult<RunState>>;
   phasekit_record_blocker(input: RecordBlockerInput): Promise<PhasekitToolResult<RunState>>;
-  phasekit_advance(input: AdvanceInput): Promise<PhasekitToolResult<never>>;
+  phasekit_advance(input: AdvanceInput): Promise<PhasekitToolResult<RunState>>;
   phasekit_verify_scope(input: VerifyScopeInput): Promise<PhasekitToolResult<PreparedVerifyScope>>;
-  phasekit_write_artifact(input: WriteArtifactInput): Promise<PhasekitToolResult<never>>;
+  phasekit_write_artifact(input: WriteArtifactInput): Promise<PhasekitToolResult<WriteGeneratedArtifactResult>>;
 };
 
 export type PhasekitOpenCodeTools = {
@@ -161,14 +183,25 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
         blocker: input.blocker,
       });
     }),
-    phasekit_advance: () => notImplementedTool("phasekit_advance", "Run advancement is implemented in a later Phasekit phase."),
+    phasekit_advance: (input) => runTool(async () => {
+      return advanceRunStage({
+        rootDir: resolveRootDir(input, defaultContext),
+        runId: input.runId,
+        targetStage: input.targetStage,
+      });
+    }),
     phasekit_verify_scope: (input) => runTool(async () => {
       return prepareVerificationScope(input.scope);
     }),
-    phasekit_write_artifact: () => notImplementedTool(
-      "phasekit_write_artifact",
-      "Artifact writing is implemented in a later Phasekit phase.",
-    ),
+    phasekit_write_artifact: (input) => runTool(async () => {
+      return writeGeneratedArtifact({
+        rootDir: resolveRootDir(input, defaultContext),
+        configRoot: resolveConfigRoot(input, defaultContext),
+        approvedConfigArtifacts: createOpenCodeArtifactPolicy(),
+        path: input.path,
+        content: input.content,
+      });
+    }),
   };
 }
 
@@ -379,12 +412,17 @@ function resolveRootDir(input: PhasekitToolContext, defaultContext: PhasekitTool
   return input.rootDir ?? defaultContext.rootDir ?? process.cwd();
 }
 
+function resolveConfigRoot(input: PhasekitToolContext, defaultContext: PhasekitToolContext): string | undefined {
+  return input.configRoot ?? defaultContext.configRoot;
+}
+
 function resolveToolContext(
   context: { worktree?: string; directory?: string },
   defaultContext: PhasekitToolContext,
 ): PhasekitToolContext {
   return {
     rootDir: defaultContext.rootDir ?? context.worktree ?? context.directory,
+    configRoot: defaultContext.configRoot,
   };
 }
 
@@ -407,16 +445,6 @@ async function runTool<T>(operation: () => Promise<T>): Promise<PhasekitToolResu
   } catch (error) {
     return { ok: false, error: toToolError(error) };
   }
-}
-
-async function notImplementedTool(toolName: string, message: string): Promise<PhasekitToolResult<never>> {
-  return {
-    ok: false,
-    error: {
-      code: "PHASEKIT_TOOL_NOT_IMPLEMENTED",
-      message: `${toolName}: ${message}`,
-    },
-  };
 }
 
 function toToolError(error: unknown): PhasekitToolError {
