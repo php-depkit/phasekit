@@ -5,6 +5,16 @@ export function describeCorePackage(): { name: typeof corePackageName } {
 }
 
 export {
+  agentsMdManagedMarker,
+  assertCanOverwriteAgentsMd,
+  generateAgentsMd,
+  isManagedAgentsMdContent,
+} from "./artifacts/agents-md";
+export type {
+  AgentsMdProjectContext,
+  GenerateAgentsMdOptions,
+} from "./artifacts/agents-md";
+export {
   defaultConfig,
 } from "./config/defaults";
 export {
