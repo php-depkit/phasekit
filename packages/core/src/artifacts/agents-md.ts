@@ -138,18 +138,33 @@ function normalizeRequiredText(value: string, fieldName: string): string {
     throw new Error(`Cannot generate AGENTS.md: project context ${fieldName} is required.`);
   }
 
-  return normalized;
+  return assertSafeMarkdownText(normalized, `project context ${fieldName}`);
 }
 
 function normalizeOptionalText(value: string | undefined): string | undefined {
   const normalized = value?.trim();
 
-  return normalized && normalized.length > 0 ? normalized : undefined;
+  return normalized && normalized.length > 0
+    ? assertSafeMarkdownText(normalized, "project context value")
+    : undefined;
 }
 
 function normalizeTextList(values: string[] | undefined): string[] {
   return [...new Set(values?.map((value) => value.trim()).filter((value) => value.length > 0) ?? [])]
+    .map((value) => assertSafeMarkdownText(value, "project context list item"))
     .sort(compareText);
+}
+
+function assertSafeMarkdownText(value: string, fieldName: string): string {
+  if (/[\r\n]/.test(value)) {
+    throw new Error(`Cannot generate AGENTS.md: ${fieldName} must be a single line.`);
+  }
+
+  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(value)) {
+    throw new Error(`Cannot generate AGENTS.md: ${fieldName} contains unsupported control characters.`);
+  }
+
+  return value;
 }
 
 function compareRules(left: Rule, right: Rule): number {
@@ -183,17 +198,21 @@ function formatRules(rules: Rule[]): string[] {
   let currentCategory = "";
 
   for (const rule of rules) {
-    if (rule.category !== currentCategory) {
+    const ruleId = assertSafeMarkdownText(rule.id, "rule id");
+    const ruleCategory = assertSafeMarkdownText(rule.category, `rule ${ruleId} category`);
+    const ruleText = assertSafeMarkdownText(rule.text, `rule ${ruleId} text`);
+
+    if (ruleCategory !== currentCategory) {
       if (lines.length > 0) {
         lines.push("");
       }
 
-      currentCategory = rule.category;
-      lines.push(`### ${rule.category}`);
+      currentCategory = ruleCategory;
+      lines.push(`### ${ruleCategory}`);
       lines.push("");
     }
 
-    lines.push(`- \`${rule.id}\`: ${rule.text}`);
+    lines.push(`- \`${ruleId}\`: ${ruleText}`);
   }
 
   return lines;
