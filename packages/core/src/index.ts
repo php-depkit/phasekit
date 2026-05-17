@@ -46,6 +46,7 @@ export type {
   DocsWriterContext,
   GeneratedDocDraft,
   GeneratedDocSection,
+  ValidateDocsFactualityResultOptions,
 } from "./docs/index";
 export {
   loadPhasekitConfig,

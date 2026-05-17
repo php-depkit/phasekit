@@ -98,6 +98,12 @@ export type DocsFactualityVerificationResult = z.infer<typeof docsFactualityVeri
 
 export type DocsWriter = (context: DocsWriterContext) => Promise<GeneratedDocDraft> | GeneratedDocDraft;
 
+export type ValidateDocsFactualityResultOptions = {
+  requiredFactSourceIds?: readonly string[];
+  factSources?: unknown;
+  draft?: unknown;
+};
+
 export function validateDocsTaskFactReferences(task: unknown, factSources: unknown): DocsTask {
   const parsedTask = docsTaskSchema.parse(task);
   const parsedFactSources = parseFactSourcesWithUniqueIds(factSources);
@@ -118,6 +124,7 @@ export function validateGeneratedDocDraftCitations(draft: unknown, factSources: 
   const parsedTask = task === undefined ? undefined : docsTaskSchema.parse(task);
   const knownFactSourceIds = new Set(parsedFactSources.map((factSource) => factSource.id));
   const citedFactSourceIds = new Set(parsedDraft.cited_fact_source_ids);
+  const sectionFactSourceIds = new Set<string>();
 
   if (parsedTask !== undefined && parsedDraft.task_id !== parsedTask.id) {
     throw new Error(`Generated doc draft ${parsedDraft.task_id} does not match docs task ${parsedTask.id}.`);
@@ -130,6 +137,7 @@ export function validateGeneratedDocDraftCitations(draft: unknown, factSources: 
       }
 
       citedFactSourceIds.add(factSourceId);
+      sectionFactSourceIds.add(factSourceId);
     }
   }
 
@@ -145,7 +153,7 @@ export function validateGeneratedDocDraftCitations(draft: unknown, factSources: 
 
   if (parsedTask !== undefined) {
     for (const factSourceId of parsedTask.required_fact_source_ids) {
-      if (!citedFactSourceIds.has(factSourceId)) {
+      if (!sectionFactSourceIds.has(factSourceId)) {
         throw new Error(`Generated doc draft ${parsedDraft.task_id} is missing required fact source ${factSourceId}.`);
       }
     }
@@ -156,16 +164,31 @@ export function validateGeneratedDocDraftCitations(draft: unknown, factSources: 
 
 export function validateDocsFactualityResult(
   result: unknown,
-  requiredFactSourceIds: readonly string[] = [],
+  optionsOrRequiredFactSourceIds: readonly string[] | ValidateDocsFactualityResultOptions = [],
 ): DocsFactualityVerificationResult {
   const parsedResult = docsFactualityVerificationResultSchema.parse(result);
+  const options: ValidateDocsFactualityResultOptions = Array.isArray(optionsOrRequiredFactSourceIds)
+    ? { requiredFactSourceIds: optionsOrRequiredFactSourceIds }
+    : (optionsOrRequiredFactSourceIds as ValidateDocsFactualityResultOptions);
   const checkedFactSourceIds = new Set(parsedResult.checked_fact_source_ids);
 
   if (parsedResult.status !== "passed") {
     return parsedResult;
   }
 
-  for (const factSourceId of requiredFactSourceIds) {
+  if (options.factSources !== undefined) {
+    const knownFactSourceIds = new Set(parseFactSourcesWithUniqueIds(options.factSources).map((factSource) => factSource.id));
+
+    for (const factSourceId of parsedResult.checked_fact_source_ids) {
+      if (!knownFactSourceIds.has(factSourceId)) {
+        throw new Error(`Passed docs factuality results cannot check unknown fact source ${factSourceId}.`);
+      }
+    }
+  }
+
+  const draftFactSourceIds = options.draft === undefined ? [] : collectDraftFactSourceIds(generatedDocDraftSchema.parse(options.draft));
+
+  for (const factSourceId of [...(options.requiredFactSourceIds ?? []), ...draftFactSourceIds]) {
     if (!checkedFactSourceIds.has(factSourceId)) {
       throw new Error(`Passed docs factuality results must check required fact source ${factSourceId}.`);
     }
@@ -177,6 +200,18 @@ export function validateDocsFactualityResult(
   }
 
   return parsedResult;
+}
+
+function collectDraftFactSourceIds(draft: GeneratedDocDraft): string[] {
+  const factSourceIds = new Set(draft.cited_fact_source_ids);
+
+  for (const section of draft.sections) {
+    for (const factSourceId of section.fact_source_ids) {
+      factSourceIds.add(factSourceId);
+    }
+  }
+
+  return [...factSourceIds];
 }
 
 function parseFactSourcesWithUniqueIds(factSources: unknown): DocsFactSource[] {

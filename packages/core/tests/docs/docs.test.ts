@@ -134,6 +134,20 @@ describe("docs factuality validation", () => {
     ).toThrow("Generated doc draft docs-setup is missing required fact source structure-core.");
   });
 
+  test("requires task-required fact sources to be cited by generated sections", () => {
+    expect(() =>
+      validateGeneratedDocDraftCitations(
+        {
+          ...draft,
+          cited_fact_source_ids: ["command-test", "structure-core"],
+          sections: [{ ...draft.sections[0]!, fact_source_ids: ["command-test"] }],
+        },
+        factSources,
+        docsTask,
+      ),
+    ).toThrow("Generated doc draft docs-setup is missing required fact source structure-core.");
+  });
+
   test("rejects missing docs task fact references", () => {
     expect(() =>
       validateDocsTaskFactReferences({ ...docsTask, required_fact_source_ids: ["command-test", "missing-fact"] }, factSources),
@@ -195,5 +209,39 @@ describe("docs factuality validation", () => {
         ],
       }),
     ).toThrow("Passed docs factuality results cannot include failure findings.");
+  });
+
+  test("rejects unknown checked fact sources in passed factuality results", () => {
+    expect(() =>
+      validateDocsFactualityResult(
+        { ...passedFactualityResult, checked_fact_source_ids: ["command-test", "invented-command"] },
+        { factSources },
+      ),
+    ).toThrow("Passed docs factuality results cannot check unknown fact source invented-command.");
+  });
+
+  test("requires passed factuality results to check all draft-cited fact sources", () => {
+    expect(validateDocsFactualityResult(passedFactualityResult, { factSources, draft })).toEqual(passedFactualityResult);
+
+    expect(() =>
+      validateDocsFactualityResult(
+        { ...passedFactualityResult, checked_fact_source_ids: ["command-test"] },
+        { factSources, draft },
+      ),
+    ).toThrow("Passed docs factuality results must check required fact source structure-core.");
+
+    expect(() =>
+      validateDocsFactualityResult(
+        { ...passedFactualityResult, checked_fact_source_ids: ["command-test", "structure-core"] },
+        {
+          factSources,
+          draft: {
+            ...draft,
+            cited_fact_source_ids: ["command-test", "structure-core", "config-review"],
+            sections: [...draft.sections, { ...draft.sections[0]!, fact_source_ids: ["config-review"] }],
+          },
+        },
+      ),
+    ).toThrow("Passed docs factuality results must check required fact source config-review.");
   });
 });
