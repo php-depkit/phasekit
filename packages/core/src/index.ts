@@ -18,6 +18,36 @@ export {
   defaultConfig,
 } from "./config/defaults";
 export {
+  docsFactSourceKindSchema,
+  docsFactSourceSchema,
+  docsFactualityFindingSchema,
+  docsFactualityFindingSeveritySchema,
+  docsFactualityVerificationResultSchema,
+  docsFactualityVerificationStatusSchema,
+  docsTaskKindSchema,
+  docsTaskSchema,
+  docsWriterContextSchema,
+  generatedDocDraftSchema,
+  generatedDocSectionSchema,
+  validateDocsFactualityResult,
+  validateDocsTaskFactReferences,
+  validateGeneratedDocDraftCitations,
+} from "./docs/index";
+export type {
+  DocsFactSource,
+  DocsFactSourceKind,
+  DocsFactualityFinding,
+  DocsFactualityFindingSeverity,
+  DocsFactualityVerificationResult,
+  DocsFactualityVerificationStatus,
+  DocsTask,
+  DocsTaskKind,
+  DocsWriter,
+  DocsWriterContext,
+  GeneratedDocDraft,
+  GeneratedDocSection,
+} from "./docs/index";
+export {
   loadPhasekitConfig,
 } from "./config/loader";
 export type {
