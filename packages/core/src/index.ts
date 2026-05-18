@@ -169,6 +169,13 @@ export type {
   CreateRunResult,
 } from "./runs/persistence";
 export {
+  orchestrateRunPhase,
+} from "./runs/orchestrate";
+export type {
+  RunPhaseOrchestrationInput,
+  RunPhaseOrchestrationResult,
+} from "./runs/orchestrate";
+export {
   isBehaviorAddingTask,
   taskPlanCheckSchema,
   taskPlanSchema,

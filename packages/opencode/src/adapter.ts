@@ -9,6 +9,7 @@ import {
   ingestProjectInputs,
   initializePlanningState,
   prepareVerificationScope,
+  orchestrateRunPhase,
   recordRunBlocker,
   validateTaskPlan,
   writeGeneratedArtifact,
@@ -21,6 +22,7 @@ import {
   type PhasekitStatus,
   type PreparedVerifyScope,
   type CreateRunResult,
+  type RunPhaseOrchestrationResult,
   type RunState,
   type TaskPlan,
   type WriteGeneratedArtifactResult,
@@ -75,6 +77,18 @@ export type IngestPathsInput = PhasekitToolContext & {
 export type CreateRunInput = PhasekitToolContext & {
   phaseId: string;
 };
+export type RunPhaseInput = PhasekitToolContext & {
+  phaseId: string;
+  plan?: unknown;
+  executionEvidence?: {
+    task_id: string;
+    evidence: unknown;
+  }[];
+  planValidationOptions?: unknown;
+  verificationResult?: unknown;
+  verificationRequestId?: string;
+  changeKind?: "planning_only" | "implementation" | "mixed";
+};
 export type ValidatePlanInput = {
   plan: unknown;
   options: unknown;
@@ -113,6 +127,7 @@ export type PhasekitToolHandlers = {
   phasekit_next_action(input?: NextActionInput): Promise<PhasekitToolResult<NextAction>>;
   phasekit_ingest_paths(input: IngestPathsInput): Promise<PhasekitToolResult<IngestProjectResult>>;
   phasekit_create_run(input: CreateRunInput): Promise<PhasekitToolResult<CreateRunResult>>;
+  phasekit_run_phase(input: RunPhaseInput): Promise<PhasekitToolResult<RunPhaseOrchestrationResult>>;
   phasekit_validate_plan(input: ValidatePlanInput): Promise<PhasekitToolResult<TaskPlan>>;
   phasekit_claim_task(input: ClaimTaskInput): Promise<PhasekitToolResult<RunState>>;
   phasekit_complete_task(input: CompleteTaskInput): Promise<PhasekitToolResult<RunState>>;
@@ -154,6 +169,18 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
     }),
     phasekit_create_run: (input) => runTool(async () => {
       return createPhaseRun({ rootDir: resolveRootDir(input, defaultContext), phaseId: input.phaseId });
+    }),
+    phasekit_run_phase: (input) => runTool(async () => {
+      return orchestrateRunPhase({
+        rootDir: resolveRootDir(input, defaultContext),
+        phaseId: input.phaseId,
+        plan: input.plan,
+        executionEvidence: input.executionEvidence,
+        planValidationOptions: input.planValidationOptions,
+        verificationResult: input.verificationResult,
+        verificationRequestId: input.verificationRequestId,
+        changeKind: input.changeKind,
+      });
     }),
     phasekit_validate_plan: (input) => runTool(async () => {
       return validateTaskPlan(input.plan, input.options);
@@ -277,6 +304,43 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
         return toOpenCodeToolResult(
           "Phasekit create run",
           await handlers.phasekit_create_run({ rootDir: args.rootDir, phaseId: args.phaseId }),
+        );
+      },
+    }),
+    phasekit_run_phase: tool({
+      description: "Run one phase through native orchestration stages with required gates.",
+      args: {
+        rootDir: schema.string().optional(),
+        phaseId: schema.string(),
+        plan: schema.unknown().optional(),
+        executionEvidence: schema
+          .array(
+            schema.object({
+              task_id: schema.string(),
+              evidence: schema.unknown(),
+            }),
+          )
+          .optional(),
+        planValidationOptions: schema.unknown().optional(),
+        verificationResult: schema.unknown().optional(),
+        verificationRequestId: schema.string().optional(),
+        changeKind: schema.enum(["planning_only", "implementation", "mixed"]).optional(),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult(
+          "Phasekit run phase",
+          await handlers.phasekit_run_phase({
+            rootDir: args.rootDir,
+            phaseId: args.phaseId,
+            plan: args.plan,
+            executionEvidence: args.executionEvidence,
+            planValidationOptions: args.planValidationOptions,
+            verificationResult: args.verificationResult,
+            verificationRequestId: args.verificationRequestId,
+            changeKind: args.changeKind,
+          }),
         );
       },
     }),

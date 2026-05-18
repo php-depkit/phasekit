@@ -38,6 +38,24 @@ const validatorOptions = {
   min_scope_words: 8,
 };
 
+function createVerificationResult(runId: string, phaseId: string) {
+  return {
+    id: `verify-${runId}`,
+    scope: { kind: "phase", phase_id: phaseId },
+    status: "passed",
+    review_status: "passed",
+    verification_status: "passed",
+    checked_at: "2026-05-17T00:01:00.000Z",
+    command_evidence: [{ kind: "test", command: "bun test", status: "passed", output_references: [] }],
+    output_references: [],
+    findings: [],
+    blockers: [],
+    linked_requirement_ids: ["REQ-1"],
+    integration_risks: [{ id: "risk-1", description: "gate", status: "covered" }],
+    missing_check_proposals: [],
+  };
+}
+
 async function withTempDir<T>(run: (rootDir: string) => Promise<T>): Promise<T> {
   const rootDir = await mkdtemp(join(tmpdir(), "phasekit-opencode-"));
 
@@ -440,6 +458,7 @@ describe("@phasekit/opencode", () => {
       "phasekit_init_project",
       "phasekit_next_action",
       "phasekit_record_blocker",
+      "phasekit_run_phase",
       "phasekit_validate_plan",
       "phasekit_verify_scope",
       "phasekit_write_artifact",
@@ -459,6 +478,7 @@ describe("@phasekit/opencode", () => {
       "phasekit_init_project",
       "phasekit_next_action",
       "phasekit_record_blocker",
+      "phasekit_run_phase",
       "phasekit_validate_plan",
       "phasekit_verify_scope",
       "phasekit_write_artifact",
@@ -491,7 +511,7 @@ describe("@phasekit/opencode", () => {
         throw new Error("Expected ingest tool to produce phase state.");
       }
 
-      const run = await tools.phasekit_create_run.execute({ phaseId: ingestResult.data.phases.phases[0]?.id ?? "missing" }, context);
+      const run = await tools.phasekit_run_phase.execute({ phaseId: ingestResult.data.phases.phases[0]?.id ?? "missing" }, context);
       const verify = await tools.phasekit_verify_scope.execute({ scope: { kind: "all" } }, context);
 
       expect(parseToolOutput(init)).toMatchObject({ ok: true });
@@ -510,12 +530,107 @@ describe("@phasekit/opencode", () => {
       });
       expect(parseToolOutput(run)).toMatchObject({
         ok: true,
-        data: { resumed: false, run: { current_phase: "INGEST-ingested-requirements" } },
+        data: { phase: { id: "INGEST-ingested-requirements" } },
       });
       expect(parseToolOutput(verify)).toMatchObject({
         ok: true,
         data: { scope: { kind: "all" }, scope_id: "all" },
       });
+    });
+  });
+
+  test("phasekit_run_phase tool requires a second request-bound verification call", async () => {
+    await withTempDir(async (rootDir) => {
+      const context = createToolContext(rootDir);
+      const tools = createPhasekitOpenCodeTools();
+
+      await tools.phasekit_init_project.execute({}, context);
+      await writeRequirements(rootDir, [{ id: "REQ-1", text: "Run the phase end to end.", locator: "Story 4" }]);
+      await writePhases(rootDir, [{ id: "P6-T4", status: "pending" }]);
+
+      const initial = parseToolOutput(await tools.phasekit_run_phase.execute({ phaseId: "P6-T4", plan: taskPlan }, context)) as {
+        ok: boolean;
+        data?: { stage: string };
+      };
+      expect(initial).toMatchObject({ ok: true, data: { stage: "execution" } });
+
+      const review = parseToolOutput(
+        await tools.phasekit_run_phase.execute(
+          {
+            phaseId: "P6-T4",
+            plan: taskPlan,
+            executionEvidence: [
+              {
+                task_id: "task-1",
+                evidence: {
+                  check_results: [{ command: "bun test packages/install/tests/index.test.ts", status: "passed" }],
+                  changed_files: ["packages/install/src/index.ts"],
+                },
+              },
+            ],
+            verificationRequestId: "ignored-same-call-request",
+            verificationResult: createVerificationResult("phase-P6-T4", "P6-T4"),
+          },
+          context,
+        ),
+      ) as {
+        ok: boolean;
+        data?: {
+          stage: string;
+          next_required?: { kind: string; request_id: string };
+        };
+      };
+
+      expect(review).toMatchObject({ ok: true, data: { stage: "review" } });
+      expect(review.data?.next_required?.kind).toBe("review_verification_request");
+
+      const reviewRequestId = review.data?.next_required?.request_id;
+      if (!reviewRequestId) {
+        throw new Error("Expected issued review request id.");
+      }
+
+      const verification = parseToolOutput(
+        await tools.phasekit_run_phase.execute(
+          {
+            phaseId: "P6-T4",
+            plan: taskPlan,
+            verificationRequestId: reviewRequestId,
+            verificationResult: createVerificationResult("phase-P6-T4", "P6-T4"),
+          },
+          context,
+        ),
+      ) as {
+        ok: boolean;
+        data?: {
+          stage: string;
+          next_required?: { kind: string; request_id: string };
+        };
+      };
+
+      expect(verification).toMatchObject({ ok: true, data: { stage: "verification" } });
+      expect(verification.data?.next_required?.kind).toBe("review_verification_request");
+
+      const verificationRequestId = verification.data?.next_required?.request_id;
+      if (!verificationRequestId) {
+        throw new Error("Expected issued verification request id.");
+      }
+
+      const complete = parseToolOutput(
+        await tools.phasekit_run_phase.execute(
+          {
+            phaseId: "P6-T4",
+            plan: taskPlan,
+            verificationRequestId,
+            verificationResult: createVerificationResult("phase-P6-T4", "P6-T4"),
+          },
+          context,
+        ),
+      ) as {
+        ok: boolean;
+        data?: { stage: string };
+      };
+
+      expect(complete).toMatchObject({ ok: true, data: { stage: "verification" } });
     });
   });
 
@@ -568,6 +683,7 @@ describe("@phasekit/opencode", () => {
         "phasekit_init_project",
         "phasekit_next_action",
         "phasekit_record_blocker",
+        "phasekit_run_phase",
         "phasekit_validate_plan",
         "phasekit_verify_scope",
         "phasekit_write_artifact",

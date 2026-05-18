@@ -134,6 +134,13 @@ export const runStateSchema = z
     changed_files: z.array(z.string().min(1)),
     commit_ids: z.array(z.string().min(1)),
     blockers: z.array(runBlockerSchema),
+    issued_verification_request: z
+      .object({
+        stage: z.enum(["review", "verification"]),
+        request_id: z.string().min(1),
+        issued_at: z.string().datetime(),
+      })
+      .optional(),
     last_successful_stage_transition: runStageTransitionSchema.optional(),
   })
   .strict();

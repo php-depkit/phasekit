@@ -176,9 +176,9 @@ const commandTemplates: CommandTemplate[] = [
     name: "pk-run-phase",
     description: "Run or resume one Phasekit phase through native tools.",
     body: [
-      "If the user provides a phase id, pass that id to the native `phasekit_create_run` tool for the current workspace root.",
+      "If the user provides a phase id, pass that id to the native `phasekit_run_phase` tool for the current workspace root.",
       "If the user does not provide a phase id, call `phasekit_next_action` and follow the returned native Phasekit tool direction instead of guessing from files or chat history.",
-      "Use `phasekit_get_status` to report current run state after tool calls and do not claim tasks, complete tasks, record blockers, verify, commit, or mutate `.planning` state from this command markdown.",
+      "Use `phasekit_get_status` to report current run state after tool calls and do not implement planning, task execution, review, verification, commit-gating, or `.planning` mutations in this command markdown.",
     ],
   },
   {

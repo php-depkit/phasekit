@@ -68,7 +68,7 @@ describe("@phasekit/install", () => {
       await expectCommandContent(configRoot, "pk-next", "phasekit_next_action");
       await expectCommandContent(configRoot, "pk-config", "phasekit_get_status");
       await expectCommandContent(configRoot, "pk-ingest", "phasekit_ingest_paths");
-      await expectCommandContent(configRoot, "pk-run-phase", "phasekit_create_run");
+      await expectCommandContent(configRoot, "pk-run-phase", "phasekit_run_phase");
       await expectCommandContent(configRoot, "pk-verify", "phasekit_verify_scope");
     });
   });
@@ -102,7 +102,7 @@ describe("@phasekit/install", () => {
 
       expect(artifact.path).toBe(join(configRoot, "opencode", "commands", "pk-run-phase.md"));
       expect(artifact.content).toContain("# /pk-run-phase");
-      expect(artifact.content).toContain("phasekit_create_run");
+      expect(artifact.content).toContain("phasekit_run_phase");
       expect(artifact.content).toContain("phasekit_next_action");
       expect(artifact.content).toContain("phasekit_get_status");
       expect(artifact.content).toContain("user provides a phase id");
