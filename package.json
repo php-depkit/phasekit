@@ -1,12 +1,16 @@
 {
   "name": "phasekit",
   "version": "0.0.0",
+  "description": "OpenCode-first planning and execution plugin with a harness-agnostic core.",
   "private": true,
+  "license": "MIT",
+  "packageManager": "bun@1.3.14",
   "type": "module",
   "workspaces": [
     "packages/*"
   ],
   "scripts": {
+    "preinstall": "bunx only-allow bun",
     "test": "bun test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit --pretty false"
