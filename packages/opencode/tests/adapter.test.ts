@@ -186,6 +186,42 @@ describe("@phasekit/opencode", () => {
 
       expect(result.data.createdPaths).toContain(".planning/project.json");
       expect(result.data.createdPaths).toContain(".planning/config.json");
+      expect(result.data.verification_commands.stored_in_project_config).toBe(false);
+    });
+  });
+
+  test("accepts explicit init command approval payload for discovered verification commands", async () => {
+    await withTempDir(async (rootDir) => {
+      await writeTextFile(
+        rootDir,
+        "package.json",
+        `${JSON.stringify({ packageManager: "bun@1.1.0", scripts: { test: "bun test" } }, null, 2)}\n`,
+      );
+
+      const tools = createPhasekitToolHandlers({ rootDir });
+      await tools.phasekit_init_project();
+      const approved = await tools.phasekit_init_project({
+        confirmationAnswer: {
+          question: {
+            id: "init-verify-commands",
+            prompt: "Do you approve persisting discovered verification commands into .planning/config.json?",
+          },
+          requirement_ids: ["verification-test"],
+          selected_recommended_option: {
+            id: "approve-discovered-commands",
+            text: "Approve and persist discovered verification commands",
+          },
+        },
+      });
+
+      expect(approved).toMatchObject({
+        ok: true,
+        data: {
+          verification_commands: {
+            stored_in_project_config: true,
+          },
+        },
+      });
     });
   });
 

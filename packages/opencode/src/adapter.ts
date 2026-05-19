@@ -26,6 +26,7 @@ import {
   type CreateRunResult,
   type AddPhaseFromGoalResult,
   type AgentsMdProjectContext,
+  type GrillMeQuestionAnswer,
   type RunPhaseOrchestrationResult,
   type RunState,
   type TaskPlan,
@@ -168,7 +169,11 @@ export function describeOpenCodeAdapter(): {
 export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext = {}): PhasekitToolHandlers {
   return {
     phasekit_init_project: (input = {}) => runTool(async () => {
-      return initializePlanningState(resolveRootDir(input, defaultContext), { config: input.config });
+      return initializePlanningState(resolveRootDir(input, defaultContext), {
+        config: input.config,
+        configRoot: resolveConfigRoot(input, defaultContext),
+        confirmationAnswer: input.confirmationAnswer,
+      });
     }),
     phasekit_get_status: (input = {}) => runTool(async () => {
       return getStatus({ rootDir: resolveRootDir(input, defaultContext), runId: input.runId });
@@ -268,11 +273,33 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
       description: "Initialize Phasekit canonical .planning state when missing.",
       args: {
         rootDir: schema.string().optional(),
+        confirmationAnswer: schema
+          .object({
+            question: schema.object({
+              id: schema.string(),
+              prompt: schema.string(),
+            }),
+            requirement_ids: schema.array(schema.string()),
+            selected_recommended_option: schema
+              .object({
+                id: schema.string(),
+                text: schema.string(),
+              })
+              .optional(),
+            custom_answer_text: schema.string().optional(),
+          })
+          .optional(),
       },
       execute: async (args, context) => {
         const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
 
-        return toOpenCodeToolResult("Phasekit init", await handlers.phasekit_init_project({ rootDir: args.rootDir }));
+        return toOpenCodeToolResult(
+          "Phasekit init",
+          await handlers.phasekit_init_project({
+            rootDir: args.rootDir,
+            confirmationAnswer: args.confirmationAnswer as GrillMeQuestionAnswer | undefined,
+          }),
+        );
       },
     }),
     phasekit_get_status: tool({
