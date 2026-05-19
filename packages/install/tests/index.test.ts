@@ -15,6 +15,7 @@ import {
 } from "../src/index";
 
 const commandNames = ["pk-init", "pk-status", "pk-next", "pk-config", "pk-ingest", "pk-add-phase", "pk-run-phase", "pk-verify"] as const;
+const supersededCommandPrefixes = ["/phasekit:"] as const;
 
 const agentNames = [
   "orchestrator",
@@ -278,9 +279,9 @@ describe("@phasekit/install", () => {
     ];
 
     for (const artifact of artifacts) {
-      expect(artifact.content).not.toContain("/phasekit:run-phase");
-      expect(artifact.content).not.toContain("/phasekit:ingest");
-      expect(artifact.content).not.toContain("/phasekit:verify");
+      for (const supersededPrefix of supersededCommandPrefixes) {
+        expect(artifact.content).not.toContain(supersededPrefix);
+      }
       expect(artifact.content).not.toContain("claimRunTask");
       expect(artifact.content).not.toContain("completeRunTask");
       expect(artifact.content).not.toContain("recordRunBlocker");
@@ -337,8 +338,9 @@ async function expectCommandContent(configRoot: string, name: string, toolName: 
   expect(content).toContain("tool");
   expect(content).not.toContain("initializePlanningState");
   expect(content).not.toContain("getStatus({");
-  expect(content).not.toContain("/phasekit:run-phase");
-  expect(content).not.toContain("/phasekit:verify");
+  for (const supersededPrefix of supersededCommandPrefixes) {
+    expect(content).not.toContain(supersededPrefix);
+  }
 }
 
 async function expectAgentContent(configRoot: string, name: string): Promise<void> {
