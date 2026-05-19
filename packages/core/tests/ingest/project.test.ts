@@ -73,6 +73,10 @@ describe("project ingest pipeline", () => {
     ].join("\n"));
 
     const ingested = await ingestProjectInputs({ rootDir, inputPaths: ["prd.md"] });
+    expect(ingested.kind).toBe("ingested");
+    if (ingested.kind !== "ingested") {
+      throw new Error("Expected ingest result.");
+    }
     const ingestedRequirementIds = ingested.requirements.requirements.map((requirement) => requirement.id);
 
     const added = await addPhaseFromGoal({ rootDir, goal: "Add a focused phase for add-phase." });
@@ -216,6 +220,11 @@ describe("project ingest pipeline", () => {
 
     const result = await ingestProjectInputs({ rootDir, inputPaths: ["prd.md"] });
 
+    expect(result.kind).toBe("ingested");
+    if (result.kind !== "ingested") {
+      throw new Error("Expected ingest success result.");
+    }
+
     expect(result.requirements.requirements.map((requirement) => requirement.id)).toEqual(["REQ-1", "REQ-2", "REQ-3"]);
     expect(result.requirements.requirements.map((requirement) => requirement.text)).toEqual([
       "Success Criteria: Ship a deterministic ingest flow.",
@@ -252,6 +261,10 @@ describe("project ingest pipeline", () => {
     ].join("\n"));
 
     const first = await ingestProjectInputs({ rootDir, inputPaths: ["prd.md"] });
+    expect(first.kind).toBe("ingested");
+    if (first.kind !== "ingested") {
+      throw new Error("Expected first ingest result.");
+    }
     await writeFile(
       join(rootDir, ".planning", "phases.json"),
       JSON.stringify({
@@ -261,6 +274,10 @@ describe("project ingest pipeline", () => {
     );
 
     const second = await ingestProjectInputs({ rootDir, inputPaths: ["prd.md"] });
+    expect(second.kind).toBe("ingested");
+    if (second.kind !== "ingested") {
+      throw new Error("Expected second ingest result.");
+    }
 
     expect(second.requirements.requirements.map((requirement) => requirement.id)).toEqual(["REQ-1"]);
     expect(second.phases.phases[0]?.status).toBe("in_progress");
@@ -279,6 +296,10 @@ describe("project ingest pipeline", () => {
     ].join("\n"));
 
     const first = await ingestProjectInputs({ rootDir, inputPaths: ["prd.md"] });
+    expect(first.kind).toBe("ingested");
+    if (first.kind !== "ingested") {
+      throw new Error("Expected first ingest result.");
+    }
     await writeFile(
       join(rootDir, ".planning", "phases.json"),
       JSON.stringify({ phases: [{ ...first.phases.phases[0], status: "complete" }] }, null, 2) + "\n",
@@ -295,6 +316,10 @@ describe("project ingest pipeline", () => {
     ].join("\n"));
 
     const second = await ingestProjectInputs({ rootDir, inputPaths: ["prd.md"] });
+    expect(second.kind).toBe("ingested");
+    if (second.kind !== "ingested") {
+      throw new Error("Expected second ingest result.");
+    }
 
     expect(second.phases.phases[0]?.id).toBe("INGEST-inputs");
     expect(second.phases.phases[0]?.status).toBe("pending");
@@ -325,9 +350,110 @@ describe("project ingest pipeline", () => {
     ];
 
     const result = await ingestProjectInputs({ rootDir, inputPaths: ["prd.md"], extractor, slicer });
+    expect(result.kind).toBe("ingested");
+    if (result.kind !== "ingested") {
+      throw new Error("Expected ingest success result.");
+    }
 
     expect(result.requirements.requirements[0]?.id).toBe("REQ-1");
     expect(result.phases.phases[0]?.id).toBe("CUSTOM-1");
+  });
+
+  test("returns clarification questions for ambiguous ingested requirements without persisting state", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+    await writeTextFile(rootDir, "prd.md", [
+      "# Product",
+      "",
+      "**Story 1: Cleanup**",
+      "Acceptance criteria:",
+      "- Fix stuff.",
+      "",
+    ].join("\n"));
+
+    const result = await ingestProjectInputs({ rootDir, inputPaths: ["prd.md"] });
+
+    expect(result).toMatchObject({
+      kind: "question",
+      questions: [{ id: "ingest-requirement-req-1" }],
+    });
+    await expect(readJsonFile(join(rootDir, ".planning", "requirements.json"), requirementsStateSchema)).resolves.toEqual({
+      requirements: [],
+    });
+    await expect(readJsonFile(join(rootDir, ".planning", "phases.json"), phasesStateSchema)).resolves.toEqual({ phases: [] });
+  });
+
+  test("uses approved ingest clarification answers before writing phases", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+    await writeTextFile(rootDir, "prd.md", [
+      "# Product",
+      "",
+      "**Story 1: Cleanup**",
+      "Acceptance criteria:",
+      "- Fix stuff.",
+      "",
+    ].join("\n"));
+
+    const result = await ingestProjectInputs({
+      rootDir,
+      inputPaths: ["prd.md"],
+      questionAnswers: [{
+        question: {
+          id: "ingest-requirement-req-1",
+          prompt: "The ingested requirement \"Cleanup: Fix stuff.\" is too ambiguous for no-assumptions planning. What exact behavior should Phasekit implement?",
+        },
+        requirement_ids: ["REQ-1"],
+        custom_answer_text: "Fix the cleanup story by removing dead code paths and add focused regression tests.",
+      }],
+    });
+
+    expect(result.kind).toBe("ingested");
+    if (result.kind !== "ingested") {
+      throw new Error("Expected clarified ingest result.");
+    }
+
+    expect(result.phases.phases[0]?.relevant_context).toContain(
+      "Approved requirement clarification: Fix the cleanup story by removing dead code paths and add focused regression tests.",
+    );
+    expect(result.phases.phases[0]?.done_criteria).toContain(
+      "Approved clarification: Fix the cleanup story by removing dead code paths and add focused regression tests.",
+    );
+  });
+
+  test("blocks ingest clarification answers that do not include exact custom details", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+    await writeTextFile(rootDir, "prd.md", [
+      "# Product",
+      "",
+      "**Story 1: Cleanup**",
+      "Acceptance criteria:",
+      "- Fix stuff.",
+      "",
+    ].join("\n"));
+
+    const result = await ingestProjectInputs({
+      rootDir,
+      inputPaths: ["prd.md"],
+      questionAnswers: [{
+        question: {
+          id: "ingest-requirement-req-1",
+          prompt: "The ingested requirement \"Cleanup: Fix stuff.\" is too ambiguous for no-assumptions planning. What exact behavior should Phasekit implement?",
+        },
+        requirement_ids: ["REQ-1"],
+        selected_recommended_option: {
+          id: "provide-requirement-clarification",
+          text: "Provide the exact expected behavior, scope, and checks.",
+        },
+      }],
+    });
+
+    expect(result).toMatchObject({ kind: "blocked" });
+    await expect(readJsonFile(join(rootDir, ".planning", "requirements.json"), requirementsStateSchema)).resolves.toEqual({
+      requirements: [],
+    });
+    await expect(readJsonFile(join(rootDir, ".planning", "phases.json"), phasesStateSchema)).resolves.toEqual({ phases: [] });
   });
 
   test("ingests the Phasekit PRD deterministically through the real pipeline", async () => {
@@ -338,6 +464,12 @@ describe("project ingest pipeline", () => {
 
     const first = await ingestProjectInputs({ rootDir, inputPaths: [".planning/PHASEKIT-PRD.md"] });
     const second = await ingestProjectInputs({ rootDir, inputPaths: [".planning/PHASEKIT-PRD.md"] });
+
+    expect(first.kind).toBe("ingested");
+    expect(second.kind).toBe("ingested");
+    if (first.kind !== "ingested" || second.kind !== "ingested") {
+      throw new Error("Expected deterministic ingest success results.");
+    }
 
     expect(first.requirements.requirements.length).toBeGreaterThan(0);
     expect(first.phases.phases.length).toBeGreaterThan(0);

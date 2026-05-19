@@ -201,7 +201,7 @@ describe("@phasekit/opencode", () => {
       const tools = createPhasekitToolHandlers({ rootDir });
       await tools.phasekit_init_project();
       const approved = await tools.phasekit_init_project({
-        confirmationAnswer: {
+        verificationCommandAnswer: {
           question: {
             id: "init-verify-commands",
             prompt: "Do you approve persisting discovered verification commands into .planning/config.json?",
@@ -293,6 +293,11 @@ describe("@phasekit/opencode", () => {
       expect(result.ok).toBe(true);
       if (!result.ok) {
         throw new Error(result.error.message);
+      }
+
+      expect(result.data.kind).toBe("ingested");
+      if (result.data.kind !== "ingested") {
+        throw new Error("Expected ingest success result.");
       }
 
       expect(result.data.inputs.map((input) => input.relativePath)).toEqual(["README.md", "docs/alpha.txt", "docs/zeta.md"]);
@@ -664,6 +669,7 @@ describe("@phasekit/opencode", () => {
       const ingestResult = parseToolOutput(ingest) as {
         ok: boolean;
         data?: {
+          kind: string;
           phases: {
             phases: { id: string }[];
           };
@@ -674,6 +680,7 @@ describe("@phasekit/opencode", () => {
         throw new Error("Expected ingest tool to produce phase state.");
       }
 
+      expect(ingestResult.data.kind).toBe("ingested");
       const run = await tools.phasekit_run_phase.execute({ phaseId: ingestResult.data.phases.phases[0]?.id ?? "missing" }, context);
       const verify = await tools.phasekit_verify_scope.execute({ scope: { kind: "all" } }, context);
 
@@ -688,6 +695,7 @@ describe("@phasekit/opencode", () => {
       expect(parseToolOutput(ingest)).toMatchObject({
         ok: true,
         data: {
+          kind: "ingested",
           inputs: [{ relativePath: "docs/prd.md", text: "Requirement\n" }],
         },
       });
@@ -818,6 +826,12 @@ describe("@phasekit/opencode", () => {
       expect(second.ok).toBe(true);
       if (!first.ok || !second.ok) {
         throw new Error("Expected PRD ingest to succeed through the OpenCode tool path.");
+      }
+
+      expect(first.data.kind).toBe("ingested");
+      expect(second.data.kind).toBe("ingested");
+      if (first.data.kind !== "ingested" || second.data.kind !== "ingested") {
+        throw new Error("Expected PRD ingest to complete without clarification questions.");
       }
 
       expect(second.data).toEqual(first.data);

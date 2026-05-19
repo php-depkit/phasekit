@@ -27,6 +27,7 @@ import {
   type AddPhaseFromGoalResult,
   type AgentsMdProjectContext,
   type GrillMeQuestionAnswer,
+  type StackQuestionAnswer,
   type RunPhaseOrchestrationResult,
   type RunState,
   type TaskPlan,
@@ -78,6 +79,7 @@ export type StatusInput = PhasekitToolContext & Pick<GetStatusOptions, "runId">;
 export type NextActionInput = StatusInput;
 export type IngestPathsInput = PhasekitToolContext & {
   inputPaths: string[];
+  questionAnswers?: readonly GrillMeQuestionAnswer[];
 };
 export type AddPhaseInput = PhasekitToolContext & {
   goal: string;
@@ -173,6 +175,8 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
       return initializePlanningState(resolveRootDir(input, defaultContext), {
         config: input.config,
         configRoot: resolveConfigRoot(input, defaultContext),
+        verificationCommandAnswer: input.verificationCommandAnswer,
+        stackAnswer: input.stackAnswer,
         confirmationAnswer: input.confirmationAnswer,
       });
     }),
@@ -185,7 +189,11 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
       return status.next_action;
     }),
     phasekit_ingest_paths: (input) => runTool(async () => {
-      return ingestProjectInputs({ rootDir: resolveRootDir(input, defaultContext), inputPaths: input.inputPaths });
+      return ingestProjectInputs({
+        rootDir: resolveRootDir(input, defaultContext),
+        inputPaths: input.inputPaths,
+        questionAnswers: input.questionAnswers,
+      });
     }),
     phasekit_add_phase: (input) => runTool(async () => {
       return addPhaseFromGoal({
@@ -294,6 +302,38 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
             custom_answer_text: schema.string().optional(),
           })
           .optional(),
+        verificationCommandAnswer: schema
+          .object({
+            question: schema.object({
+              id: schema.string(),
+              prompt: schema.string(),
+            }),
+            requirement_ids: schema.array(schema.string()),
+            selected_recommended_option: schema
+              .object({
+                id: schema.string(),
+                text: schema.string(),
+              })
+              .optional(),
+            custom_answer_text: schema.string().optional(),
+          })
+          .optional(),
+        stackAnswer: schema
+          .object({
+            question: schema.object({
+              id: schema.string(),
+              prompt: schema.string(),
+            }),
+            requirement_ids: schema.array(schema.string()),
+            selected_recommended_option: schema
+              .object({
+                id: schema.string(),
+                text: schema.string(),
+              })
+              .optional(),
+            custom_answer_text: schema.string().optional(),
+          })
+          .optional(),
       },
       execute: async (args, context) => {
         const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
@@ -302,6 +342,8 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
           "Phasekit init",
           await handlers.phasekit_init_project({
             rootDir: args.rootDir,
+            verificationCommandAnswer: args.verificationCommandAnswer as GrillMeQuestionAnswer | undefined,
+            stackAnswer: args.stackAnswer as StackQuestionAnswer | undefined,
             confirmationAnswer: args.confirmationAnswer as GrillMeQuestionAnswer | undefined,
           }),
         );
@@ -339,16 +381,36 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
     }),
     phasekit_ingest_paths: tool({
       description: "Expand Phasekit ingest input paths through core ingest behavior.",
-      args: {
-        rootDir: schema.string().optional(),
-        inputPaths: schema.array(schema.string()),
-      },
+        args: {
+          rootDir: schema.string().optional(),
+          inputPaths: schema.array(schema.string()),
+          questionAnswers: schema.array(
+            schema.object({
+              question: schema.object({
+                id: schema.string(),
+                prompt: schema.string(),
+              }),
+              requirement_ids: schema.array(schema.string()),
+              selected_recommended_option: schema
+                .object({
+                  id: schema.string(),
+                  text: schema.string(),
+                })
+                .optional(),
+              custom_answer_text: schema.string().optional(),
+            }),
+          ).optional(),
+        },
       execute: async (args, context) => {
         const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
 
         return toOpenCodeToolResult(
           "Phasekit ingest paths",
-          await handlers.phasekit_ingest_paths({ rootDir: args.rootDir, inputPaths: args.inputPaths }),
+          await handlers.phasekit_ingest_paths({
+            rootDir: args.rootDir,
+            inputPaths: args.inputPaths,
+            questionAnswers: args.questionAnswers as GrillMeQuestionAnswer[] | undefined,
+          }),
         );
       },
     }),

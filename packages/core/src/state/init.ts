@@ -3,7 +3,13 @@ import { join, relative } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { loadPhasekitConfig } from "../config/loader";
-import { decideStack, type StackDecision } from "../greenfield/index";
+import {
+  confirmStackQuestionAnswer,
+  decideStack,
+  writeConfirmedProjectStack,
+  type StackDecision,
+  type StackQuestionAnswer,
+} from "../greenfield/index";
 import { validateGrillMeQuestionAnswer, type GrillMeQuestion, type GrillMeQuestionAnswer } from "../planning/slices";
 import type { PhasekitConfigOverride } from "../config/schema";
 import { discoverVerificationCommands, type PackageManager, type VerificationCommand } from "../verify/commands";
@@ -26,6 +32,8 @@ type PlanningEntry = {
 export type InitializePlanningStateOptions = {
   config?: PhasekitConfigOverride;
   configRoot?: string;
+  verificationCommandAnswer?: GrillMeQuestionAnswer;
+  stackAnswer?: StackQuestionAnswer;
   confirmationAnswer?: GrillMeQuestionAnswer;
 };
 
@@ -174,8 +182,9 @@ export async function initializePlanningState(
   const verifyQuestion = discoveredOnlyCommands.length > 0
     ? createVerificationCommandQuestion(discoveredOnlyCommands)
     : undefined;
-  const explicitApproval = verifyQuestion && options.confirmationAnswer
-    ? resolveVerificationCommandApproval(verifyQuestion, options.confirmationAnswer)
+  const verificationCommandAnswer = options.verificationCommandAnswer ?? options.confirmationAnswer;
+  const explicitApproval = verifyQuestion && verificationCommandAnswer
+    ? resolveVerificationCommandApproval(verifyQuestion, verificationCommandAnswer)
     : false;
 
   let storedInProjectConfig = false;
@@ -213,9 +222,50 @@ export async function initializePlanningState(
     question: verifyQuestion,
     stored_in_project_config: storedInProjectConfig,
   };
-  result.stack_decision = stackDecision;
+  result.stack_decision = await resolveInitStackDecision(rootDir, stackDecision, options.stackAnswer);
 
   return result;
+}
+
+async function resolveInitStackDecision(
+  rootDir: string,
+  stackDecision: StackDecision,
+  stackAnswer?: StackQuestionAnswer,
+): Promise<StackDecision> {
+  if (stackDecision.kind === "confirmed") {
+    if (stackDecision.source === "project") {
+      return stackDecision;
+    }
+
+    const project = await writeConfirmedProjectStack(rootDir, stackDecision.stack);
+    return {
+      ...stackDecision,
+      project,
+    };
+  }
+
+  if (stackDecision.kind !== "question" || stackAnswer === undefined) {
+    return stackDecision;
+  }
+
+  if (stackAnswer.question.id !== stackDecision.question.id) {
+    return {
+      kind: "blocker",
+      reason: `Stack answer question id ${stackAnswer.question.id} does not match expected ${stackDecision.question.id}.`,
+      next_step: "Answer the active greenfield stack question before planning implementation.",
+    };
+  }
+
+  const confirmed = confirmStackQuestionAnswer(stackAnswer);
+  if (confirmed.kind !== "confirmed") {
+    return confirmed;
+  }
+
+  const project = await writeConfirmedProjectStack(rootDir, confirmed.stack);
+  return {
+    ...confirmed,
+    project,
+  };
 }
 
 async function readPackageMetadata(rootDir: string): Promise<{ packageManager: PackageManager; scripts: Record<string, string> } | undefined> {

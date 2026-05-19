@@ -307,6 +307,33 @@ describe("planning state initialization", () => {
     expect(result.stack_decision.question.id).toBe("greenfield-stack");
   });
 
+  test("persists an approved greenfield stack answer into project state during init", async () => {
+    const rootDir = await createTempDirectory();
+
+    const result = await initializePlanningState(rootDir, {
+      stackAnswer: {
+        question: {
+          id: "greenfield-stack",
+          prompt: "Which tech stack should Phasekit use for this greenfield project?",
+        },
+        requirement_ids: ["greenfield-stack"],
+        selected_recommended_option: {
+          id: "approve-recommended-stack",
+          text: "TypeScript",
+        },
+      },
+    });
+
+    expect(result.stack_decision).toMatchObject({
+      kind: "confirmed",
+      stack: "TypeScript",
+      source: "answer",
+    });
+    await expect(readJsonFile(join(rootDir, ".planning", "project.json"), projectStateSchema)).resolves.toEqual({
+      stack: "TypeScript",
+    });
+  });
+
   test("does not return a greenfield stack question when recommendation is disabled globally", async () => {
     const rootDir = await createTempDirectory();
     const configRoot = join(rootDir, "global-config-root");

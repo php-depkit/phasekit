@@ -1,6 +1,12 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+
 import { describe, expect, test } from "bun:test";
 
 import {
+  generateDocumentation,
+  initializePlanningState,
   docsTaskSchema,
   parseStateFile,
   validateDocsFactualityResult,
@@ -243,5 +249,113 @@ describe("docs factuality validation", () => {
         },
       ),
     ).toThrow("Passed docs factuality results must check required fact source config-review.");
+  });
+});
+
+describe("docs generation pipeline", () => {
+  test("collects factual docs context, validates the draft, and writes output when requested", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "phasekit-docs-"));
+    const generatedDocsTask: DocsTask = {
+      ...docsTask,
+      required_fact_source_ids: ["command-verify-test", "file-tsconfig-json"],
+    };
+
+    try {
+      await initializePlanningState(rootDir, {
+        stackAnswer: {
+          question: {
+            id: "greenfield-stack",
+            prompt: "Which tech stack should Phasekit use for this greenfield project?",
+          },
+          requirement_ids: ["greenfield-stack"],
+          custom_answer_text: "Bun + TypeScript",
+        },
+      });
+      await writeFile(join(rootDir, "package.json"), JSON.stringify({
+        packageManager: "bun@1.1.0",
+        scripts: {
+          test: "bun test",
+        },
+      }, null, 2), "utf8");
+      await writeFile(join(rootDir, "tsconfig.json"), "{}\n", "utf8");
+      await writeFile(join(rootDir, ".planning", "config.json"), JSON.stringify({
+        quality: {
+          review: "always",
+        },
+      }, null, 2), "utf8");
+      await writeFile(join(rootDir, "README.md"), "# Docs\n", "utf8");
+
+      const result = await generateDocumentation({
+        rootDir,
+        task: generatedDocsTask,
+        writeOutput: true,
+        writer: (context) => ({
+          task_id: context.task.id,
+          title: context.task.title,
+          cited_fact_source_ids: ["command-verify-test", "file-tsconfig-json"],
+          sections: [
+            {
+              heading: "Checks",
+              body: `Run ${context.commands.find((command) => command === "bun run test") ?? "missing"}.`,
+              fact_source_ids: ["command-verify-test"],
+            },
+            {
+              heading: "Structure",
+              body: "Keep TypeScript project settings in `tsconfig.json`.",
+              fact_source_ids: ["file-tsconfig-json"],
+            },
+          ],
+        }),
+        factualityVerifier: () => ({
+          status: "passed",
+          checked_at: "2026-05-19T00:00:00.000Z",
+          checked_fact_source_ids: ["command-verify-test", "file-tsconfig-json"],
+          findings: [],
+        }),
+      });
+
+      expect(result.context.confirmed_stack).toBe("Bun + TypeScript");
+      expect(result.context.commands).toContain("/pk-init");
+      expect(result.context.commands).toContain("bun run test");
+      expect(result.context.config_keys).toContain("quality.review");
+      expect(result.wrote_output).toBe(true);
+      expect(result.output_path).toBe("docs/setup.md");
+      await expect(readFile(join(rootDir, "docs", "setup.md"), "utf8")).resolves.toContain("# Setup Phasekit");
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("does not write output when generated docs fail citation validation", async () => {
+    const rootDir = await mkdtemp(join(tmpdir(), "phasekit-docs-"));
+    const generatedDocsTask: DocsTask = {
+      ...docsTask,
+      required_fact_source_ids: ["command-pk-init"],
+    };
+
+    try {
+      await initializePlanningState(rootDir);
+
+      await expect(generateDocumentation({
+        rootDir,
+        task: generatedDocsTask,
+        writeOutput: true,
+        writer: () => ({
+          task_id: generatedDocsTask.id,
+          title: generatedDocsTask.title,
+          cited_fact_source_ids: ["invented-fact"],
+          sections: [
+            {
+              heading: "Broken",
+              body: "This cites a missing fact.",
+              fact_source_ids: ["invented-fact"],
+            },
+          ],
+        }),
+      })).rejects.toThrow("Generated doc draft docs-setup cites unsupported fact source invented-fact.");
+      await expect(readFile(join(rootDir, "docs", "setup.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" });
+    } finally {
+      await rm(rootDir, { recursive: true, force: true });
+    }
   });
 });

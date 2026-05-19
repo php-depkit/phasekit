@@ -19,13 +19,37 @@ export interface IngestProjectOptions {
   extractor?: RequirementExtractor;
   scout?: ContextScout;
   slicer?: PhaseSlicer;
+  questionAnswers?: readonly GrillMeQuestionAnswer[];
+  questioner?: IngestQuestioner;
 }
 
-export interface IngestProjectResult {
-  inputs: IngestTextInput[];
-  requirements: RequirementsState;
-  phases: PhasesState;
+export type IngestProjectResult =
+  | {
+      kind: "ingested";
+      inputs: IngestTextInput[];
+      requirements: RequirementsState;
+      phases: PhasesState;
+    }
+  | {
+      kind: "question";
+      inputs: IngestTextInput[];
+      requirements: RequirementsState;
+      questions: readonly GrillMeQuestion[];
+    }
+  | {
+      kind: "blocked";
+      reason: string;
+      next_step: string;
+    };
+
+export interface IngestQuestionerInput {
+  inputs: readonly IngestTextInput[];
+  requirements: RequirementsState["requirements"];
 }
+
+export type IngestQuestioner = (
+  input: IngestQuestionerInput,
+) => readonly GrillMeQuestion[] | Promise<readonly GrillMeQuestion[]>;
 
 export interface AddPhaseFromGoalOptions {
   rootDir: string;
@@ -69,6 +93,25 @@ export async function ingestProjectInputs(options: IngestProjectOptions): Promis
     context,
     extractor: options.extractor ?? extractRequirementsFromSupportedText,
   });
+  const questions = [...await (options.questioner ?? createIngestQuestions)({
+    inputs,
+    requirements: requirements.requirements,
+  })].sort((left, right) => compareStrings(left.id, right.id));
+  const answeredQuestions = resolveIngestQuestionAnswers(questions, options.questionAnswers);
+
+  if (answeredQuestions.kind === "question") {
+    return {
+      kind: "question",
+      inputs,
+      requirements,
+      questions: answeredQuestions.questions,
+    };
+  }
+
+  if (answeredQuestions.kind === "blocked") {
+    return answeredQuestions;
+  }
+
   const scopedContext = await (options.scout ?? scoutCodebaseContext)({
     rootPath: rootDir,
     requirementIds: requirements.requirements.map((requirement) => requirement.id),
@@ -77,10 +120,14 @@ export async function ingestProjectInputs(options: IngestProjectOptions): Promis
   const slices = await (options.slicer ?? sliceRequirementsIntoPhases)({
     requirements: requirements.requirements,
     context: scopedContext,
-    answeredQuestions: [],
+    answeredQuestions: answeredQuestions.answeredQuestions,
     confirmed_stack: context.confirmed_stack,
   });
-  validateRequirementCoverage({ requirements: requirements.requirements, phases: slices });
+  validateRequirementCoverage({
+    requirements: requirements.requirements,
+    phases: slices,
+    questions: answeredQuestions.remainingQuestions,
+  });
 
   const phases = preserveExistingPhaseStatuses(toPhasesState(slices), existingPhases);
 
@@ -90,6 +137,7 @@ export async function ingestProjectInputs(options: IngestProjectOptions): Promis
   ]);
 
   return {
+    kind: "ingested",
     inputs,
     requirements,
     phases,
@@ -167,6 +215,102 @@ export async function addPhaseFromGoal(options: AddPhaseFromGoalOptions): Promis
   };
 }
 
+type ResolvedIngestQuestionAnswers =
+  | {
+      kind: "answered";
+      answeredQuestions: readonly GrillMeQuestionAnswer[];
+      remainingQuestions: readonly GrillMeQuestion[];
+    }
+  | {
+      kind: "question";
+      questions: readonly GrillMeQuestion[];
+    }
+  | {
+      kind: "blocked";
+      reason: string;
+      next_step: string;
+    };
+
+function createIngestQuestions(input: IngestQuestionerInput): readonly GrillMeQuestion[] {
+  return input.requirements
+    .filter((requirement) => isAmbiguousIngestRequirement(requirement.text))
+    .map((requirement) => ({
+      id: `ingest-requirement-${requirement.id.toLowerCase()}`,
+      requirement_ids: [requirement.id],
+      prompt: `The ingested requirement "${requirement.text}" is too ambiguous for no-assumptions planning. What exact behavior should Phasekit implement?`,
+      options: [
+        {
+          id: "provide-requirement-clarification",
+          text: "Provide the exact expected behavior, scope, and checks.",
+          recommended: true,
+        },
+      ],
+      custom_answer: {
+        enabled: true,
+        label: "Exact requirement clarification",
+      },
+    }));
+}
+
+function resolveIngestQuestionAnswers(
+  questions: readonly GrillMeQuestion[],
+  providedAnswers: readonly GrillMeQuestionAnswer[] | undefined,
+): ResolvedIngestQuestionAnswers {
+  if (questions.length === 0) {
+    return {
+      kind: "answered",
+      answeredQuestions: [],
+      remainingQuestions: [],
+    };
+  }
+
+  if (providedAnswers === undefined || providedAnswers.length === 0) {
+    return {
+      kind: "question",
+      questions,
+    };
+  }
+
+  const questionsById = new Map(questions.map((question) => [question.id, question] as const));
+  const answersByQuestionId = new Map<string, GrillMeQuestionAnswer>();
+
+  for (const answer of providedAnswers) {
+    const validatedAnswer = validateGrillMeQuestionAnswer(answer);
+    const matchingQuestion = questionsById.get(validatedAnswer.question.id);
+    if (matchingQuestion === undefined) {
+      return {
+        kind: "blocked",
+        reason: `Ingest answer question id ${validatedAnswer.question.id} does not match an active ingest clarification question.`,
+        next_step: "Answer only the active ingest clarification question before retrying ingest.",
+      };
+    }
+
+    if (validatedAnswer.custom_answer_text === undefined) {
+      return {
+        kind: "blocked",
+        reason: `Ingest clarification ${validatedAnswer.question.id} requires a custom answer with exact behavior before planning.`,
+        next_step: "Provide a custom clarification answer with specific scope, behavior, and checks.",
+      };
+    }
+
+    answersByQuestionId.set(matchingQuestion.id, validatedAnswer);
+  }
+
+  const unansweredQuestions = questions.filter((question) => !answersByQuestionId.has(question.id));
+  if (unansweredQuestions.length > 0) {
+    return {
+      kind: "question",
+      questions: unansweredQuestions,
+    };
+  }
+
+  return {
+    kind: "answered",
+    answeredQuestions: questions.map((question) => answersByQuestionId.get(question.id)!).filter(Boolean),
+    remainingQuestions: [],
+  };
+}
+
 function resolveAddPhaseGoal(goal: string, question: GrillMeQuestion, answer?: GrillMeQuestionAnswer):
   | { kind: "resolved"; goal: string }
   | { kind: "question"; question: GrillMeQuestion }
@@ -233,6 +377,14 @@ function isAmbiguousAddPhaseGoal(goal: string): boolean {
 
   return /\b(stuff|things|something|misc|cleanup|improve|fixes?)\b/.test(normalized)
     && !/\b(in|for|on|with|through|across)\b/.test(normalized);
+}
+
+function isAmbiguousIngestRequirement(requirementText: string): boolean {
+  const normalized = requirementText.trim().toLowerCase();
+  const scopedText = normalized.includes(": ") ? normalized.slice(normalized.indexOf(": ") + 2) : normalized;
+
+  return /\b(stuff|things|something|misc|cleanup|improve|fix(?:es)?|better|various|appropriate|etc)\b/.test(scopedText)
+    && !/\b(in|for|on|with|through|across|using|when|if|from|to)\b/.test(scopedText);
 }
 
 async function readExistingProjectState(filePath: string): Promise<ProjectState> {
@@ -560,12 +712,19 @@ export function sliceRequirementsIntoPhases(input: SliceSourceRequirementsInput)
     const label = metadata?.label ?? "Ingested Requirements";
     const sourcePath = metadata?.sourcePath ?? "";
     const requirements = groups.get(groupKey) ?? [];
+    const clarificationNotes = requirements.flatMap((requirement) => {
+      return input.answeredQuestions
+        .filter((answer) => answer.requirement_ids.includes(requirement.id))
+        .map((answer) => answer.custom_answer_text ?? answer.selected_recommended_option?.text ?? "")
+        .filter((note) => note.trim() !== "");
+    });
     const includeSourceInPhaseId = (sourcePathsByLabel.get(label)?.size ?? 0) > 1 || sourcePath.startsWith(".planning/goal-input-");
     const phaseId = includeSourceInPhaseId
       ? `INGEST-${slugify(label)}-${slugify(toSourcePhaseSlug(sourcePath))}`
       : `INGEST-${slugify(label)}`;
     const relevantContext = dedupe([
       ...(input.confirmed_stack ? [`Confirmed stack: ${input.confirmed_stack}`] : []),
+      ...clarificationNotes.map((note) => `Approved requirement clarification: ${note}`),
       ...input.context.patterns.slice(0, 4),
       ...input.context.schemas.slice(0, 2),
     ]);
@@ -591,7 +750,10 @@ export function sliceRequirementsIntoPhases(input: SliceSourceRequirementsInput)
       likely_change_areas: likelyChangeAreas.length > 0 ? likelyChangeAreas : ["packages/core/src"],
       test_strategy: testStrategy,
       integration_risks: integrationRisks,
-      done_criteria: requirements.map((requirement) => requirement.text),
+      done_criteria: dedupe([
+        ...requirements.map((requirement) => requirement.text),
+        ...clarificationNotes.map((note) => `Approved clarification: ${note}`),
+      ]),
     };
   });
 }

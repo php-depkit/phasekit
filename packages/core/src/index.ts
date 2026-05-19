@@ -24,6 +24,15 @@ export {
   defaultConfig,
 } from "./config/defaults";
 export {
+  collectDocsFactSources,
+  generateDocumentation,
+} from "./docs/generate";
+export type {
+  DocsFactualityVerifier,
+  GenerateDocumentationOptions,
+  GenerateDocumentationResult,
+} from "./docs/generate";
+export {
   docsFactSourceKindSchema,
   docsFactSourceSchema,
   docsFactualityFindingSchema,
