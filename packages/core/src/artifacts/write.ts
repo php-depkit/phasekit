@@ -4,6 +4,8 @@ import { basename, dirname, isAbsolute, join, normalize, relative, resolve } fro
 
 import { agentsMdManagedMarker, assertCanOverwriteAgentsMd } from "./agents-md";
 
+export const projectArtifactManagedMarker = "<!-- phasekit:managed project-artifact v1 -->";
+
 const projectGeneratedArtifacts = new Set([
   "PROJECT.md",
   "PHASES.md",
@@ -82,9 +84,15 @@ type ArtifactPolicyInput = {
 function resolveArtifactPolicy(input: ArtifactPolicyInput): ArtifactPolicy {
   if (isAllowedProjectArtifact(input.resolvedRoot, input.resolvedProjectTarget, input.relativeProjectTarget)) {
     const fileName = basename(input.resolvedProjectTarget);
+    const marker =
+      fileName === "AGENTS.md"
+        ? agentsMdManagedMarker
+        : fileName === "PROJECT.md" || fileName === "PHASES.md" || fileName === "RUN-SUMMARY.md" || fileName === "VERIFICATION.md"
+          ? projectArtifactManagedMarker
+          : undefined;
 
     return {
-      marker: fileName === "AGENTS.md" ? agentsMdManagedMarker : undefined,
+      marker,
       reportedPath: fileName,
       targetPath: input.resolvedProjectTarget,
     };

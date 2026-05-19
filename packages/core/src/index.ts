@@ -233,6 +233,7 @@ export type {
   TaskCompletionEvidence,
 } from "./runs/tools";
 export {
+  projectArtifactManagedMarker,
   writeGeneratedArtifact,
 } from "./artifacts/write";
 export type {

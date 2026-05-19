@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { agentsMdManagedMarker, writeGeneratedArtifact } from "../../src";
+import { agentsMdManagedMarker, projectArtifactManagedMarker, writeGeneratedArtifact } from "../../src";
 
 const managedConfigArtifacts = [
   {
@@ -51,6 +51,24 @@ describe("generated artifact writing", () => {
     const commandPath = join(configRoot, "opencode", "commands", "pk-status.md");
     await mkdir(dirname(commandPath), { recursive: true });
     await writeFile(commandPath, "# custom\n", "utf8");
+    await expect(
+      writeGeneratedArtifact({
+        rootDir,
+        path: "PROJECT.md",
+        content: `${projectArtifactManagedMarker}\n# PROJECT.md\n`,
+      }),
+    ).resolves.toEqual({ path: "PROJECT.md" });
+
+    const projectPath = join(rootDir, "PROJECT.md");
+    await writeFile(projectPath, "# custom project\n", "utf8");
+    await expect(
+      writeGeneratedArtifact({
+        rootDir,
+        path: "PROJECT.md",
+        content: `${projectArtifactManagedMarker}\n# PROJECT.md\n`,
+      }),
+    ).rejects.toThrow("Refusing to overwrite unmanaged generated artifact:");
+
     await expect(
       writeGeneratedArtifact({
         rootDir,
