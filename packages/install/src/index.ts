@@ -183,10 +183,10 @@ const commandTemplates: CommandTemplate[] = [
   },
   {
     name: "pk-verify",
-    description: "Prepare a scoped Phasekit verification request.",
+    description: "Execute scoped Phasekit verification through native tools.",
     body: [
       "Call the `phasekit_verify_scope` tool for the current workspace root with the user-provided verification scope as `scope`.",
-      "Return the tool result directly and do not run shell commands, write verification result files, create repair tasks, commit, or mutate repositories from this command markdown.",
+      "Return the tool result directly; native tools execute approved checks and persist `.planning/verifications/<scope-id>.json`. Focused repair follow-up is created on failure only when a matching phase run context is available to update.",
       "If the tool reports a missing or invalid scope, ask for a task, phase, group, or all scope instead of inventing one.",
     ],
   },

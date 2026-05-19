@@ -328,9 +328,14 @@ function buildNextRequiredEvidence(
 ): RunPhaseOrchestrationResult["next_required"] {
   if (run.current_stage === "execution") {
     const completed = new Set(run.claimed_tasks.filter((task) => task.completed_at).map((task) => task.id));
+    const pendingPlanTaskIds = plan.tasks.filter((task) => !completed.has(task.id)).map((task) => task.id);
+    const pendingClaimedTaskIds = run.claimed_tasks
+      .filter((task) => !task.completed_at)
+      .map((task) => task.id)
+      .filter((taskId) => !pendingPlanTaskIds.includes(taskId));
     return {
       kind: "execution_evidence",
-      pending_task_ids: plan.tasks.filter((task) => !completed.has(task.id)).map((task) => task.id),
+      pending_task_ids: [...pendingPlanTaskIds, ...pendingClaimedTaskIds],
     };
   }
 

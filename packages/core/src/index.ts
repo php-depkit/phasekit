@@ -307,6 +307,12 @@ export type {
   VerifyTaskScope,
 } from "./verify/schemas";
 export {
+  executeVerificationScope,
+} from "./verify/execute";
+export type {
+  VerifyScopeExecutionInput,
+} from "./verify/execute";
+export {
   prepareVerificationScope,
 } from "./verify/scope";
 export type {

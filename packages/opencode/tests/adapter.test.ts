@@ -346,35 +346,62 @@ describe("@phasekit/opencode", () => {
   });
 
   test("prepares verification scopes through core-backed schema validation", async () => {
-    const tools = createPhasekitToolHandlers();
+    await withTempDir(async (rootDir) => {
+      const tools = createPhasekitToolHandlers({ rootDir });
+      await tools.phasekit_init_project();
+      await writePhases(rootDir, [{ id: "P7", status: "pending" }, { id: "P8", status: "pending" }]);
+      await writeRequirements(rootDir, [{ id: "REQ-1", text: "Scope", locator: "1" }]);
+      await writeTextFile(rootDir, "package.json", JSON.stringify({ scripts: { test: "bun test" } }, null, 2));
 
-    await expect(tools.phasekit_verify_scope({ scope: { kind: "task", phase_id: "P7", plan_id: "plan-1", task_id: "task-1" } })).resolves.toMatchObject({
-      ok: true,
-      data: {
-        scope: { kind: "task", phase_id: "P7", plan_id: "plan-1", task_id: "task-1" },
-        scope_id: "task-P7-plan-1-task-1",
-        approved_check_policy: {
-          command_execution: "not_started",
-          run_approved_checks_only: true,
-          missing_checks_require_approval: true,
+      await expect(tools.phasekit_verify_scope({ scope: { kind: "task", phase_id: "P7", plan_id: "plan-1", task_id: "task-1" } })).resolves.toMatchObject({
+        ok: true,
+        data: {
+          scope: { kind: "task", phase_id: "P7", plan_id: "plan-1", task_id: "task-1" },
+          id: "verify-task-P7-plan-1-task-1",
         },
-        repair_policy: {
-          focused_repair_only: true,
-          repair_persistence: "not_implemented",
-        },
-      },
+      });
+      await expect(tools.phasekit_verify_scope({ scope: { kind: "phase", phase_id: "P7" } })).resolves.toMatchObject({
+        ok: true,
+        data: { scope: { kind: "phase", phase_id: "P7" }, id: "verify-phase-P7" },
+      });
+      await expect(tools.phasekit_verify_scope({ scope: { kind: "group", group_id: "release-1", phase_ids: ["P7", "P8"] } })).resolves.toMatchObject({
+        ok: true,
+        data: { scope: { kind: "group", group_id: "release-1", phase_ids: ["P7", "P8"] }, id: "verify-group-release-1" },
+      });
+      await expect(tools.phasekit_verify_scope({ scope: { kind: "all" } })).resolves.toMatchObject({
+        ok: true,
+        data: { scope: { kind: "all" }, id: "verify-all" },
+      });
     });
-    await expect(tools.phasekit_verify_scope({ scope: { kind: "phase", phase_id: "P7" } })).resolves.toMatchObject({
-      ok: true,
-      data: { scope: { kind: "phase", phase_id: "P7" }, scope_id: "phase-P7" },
-    });
-    await expect(tools.phasekit_verify_scope({ scope: { kind: "group", group_id: "release-1", phase_ids: ["P7", "P8"] } })).resolves.toMatchObject({
-      ok: true,
-      data: { scope: { kind: "group", group_id: "release-1", phase_ids: ["P7", "P8"] }, scope_id: "group-release-1" },
-    });
-    await expect(tools.phasekit_verify_scope({ scope: { kind: "all" } })).resolves.toMatchObject({
-      ok: true,
-      data: { scope: { kind: "all" }, scope_id: "all" },
+  });
+
+  test("requires and accepts missing-check approvals through verify tool input", async () => {
+    await withTempDir(async (rootDir) => {
+      const tools = createPhasekitToolHandlers({ rootDir });
+      await tools.phasekit_init_project();
+      await writePhases(rootDir, [{ id: "P7", status: "pending" }]);
+      await writeRequirements(rootDir, [{ id: "REQ-1", text: "Scope", locator: "1" }]);
+      await writeTextFile(rootDir, "package.json", JSON.stringify({ scripts: { "test:unit": "bun test" } }, null, 2));
+
+      const blocked = await tools.phasekit_verify_scope({ scope: { kind: "phase", phase_id: "P7" } });
+      expect(blocked.ok).toBe(true);
+      if (!blocked.ok) {
+        throw new Error(blocked.error.message);
+      }
+      expect(blocked.data.status).toBe("blocked");
+      expect(blocked.data.missing_check_proposals.length).toBeGreaterThan(0);
+
+      const approved = await tools.phasekit_verify_scope({
+        scope: { kind: "phase", phase_id: "P7" },
+        approvedMissingCheckIds: blocked.data.missing_check_proposals.map((proposal) => proposal.id),
+        reviewStatus: "passed",
+      });
+      expect(approved.ok).toBe(true);
+      if (!approved.ok) {
+        throw new Error(approved.error.message);
+      }
+      expect(approved.data.status).toBe("failed");
+      expect(approved.data.missing_check_proposals).toEqual([]);
     });
   });
 
@@ -534,7 +561,13 @@ describe("@phasekit/opencode", () => {
       });
       expect(parseToolOutput(verify)).toMatchObject({
         ok: true,
-        data: { scope: { kind: "all" }, scope_id: "all" },
+        data: {
+          scope: { kind: "all" },
+          id: "verify-all",
+          status: "blocked",
+          review_status: "skipped",
+          verification_status: "passed",
+        },
       });
     });
   });

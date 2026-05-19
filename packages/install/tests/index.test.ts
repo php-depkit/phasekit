@@ -128,6 +128,7 @@ describe("@phasekit/install", () => {
       expect(artifact.content).toContain("phasekit_verify_scope");
       expect(artifact.content).toContain("user-provided verification scope");
       expect(artifact.content).toContain("task, phase, group, or all scope");
+      expect(artifact.content).toContain("matching phase run context is available");
       expect(artifact.content).not.toContain("verifyScopeSchema");
       expect(artifact.content).not.toContain("verificationResultSchema");
       expect(artifact.content).not.toContain("writeRunState");

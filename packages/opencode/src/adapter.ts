@@ -8,7 +8,7 @@ import {
   getStatus,
   ingestProjectInputs,
   initializePlanningState,
-  prepareVerificationScope,
+  executeVerificationScope,
   orchestrateRunPhase,
   recordRunBlocker,
   validateTaskPlan,
@@ -20,7 +20,7 @@ import {
   type ManagedConfigArtifactPolicy,
   type NextAction,
   type PhasekitStatus,
-  type PreparedVerifyScope,
+  type VerificationResult,
   type CreateRunResult,
   type RunPhaseOrchestrationResult,
   type RunState,
@@ -115,6 +115,8 @@ export type AdvanceInput = PhasekitToolContext & {
 };
 export type VerifyScopeInput = PhasekitToolContext & {
   scope: unknown;
+  approvedMissingCheckIds?: string[];
+  reviewStatus?: VerificationResult["review_status"];
 };
 export type WriteArtifactInput = PhasekitToolContext & {
   path: string;
@@ -133,7 +135,7 @@ export type PhasekitToolHandlers = {
   phasekit_complete_task(input: CompleteTaskInput): Promise<PhasekitToolResult<RunState>>;
   phasekit_record_blocker(input: RecordBlockerInput): Promise<PhasekitToolResult<RunState>>;
   phasekit_advance(input: AdvanceInput): Promise<PhasekitToolResult<RunState>>;
-  phasekit_verify_scope(input: VerifyScopeInput): Promise<PhasekitToolResult<PreparedVerifyScope>>;
+  phasekit_verify_scope(input: VerifyScopeInput): Promise<PhasekitToolResult<VerificationResult>>;
   phasekit_write_artifact(input: WriteArtifactInput): Promise<PhasekitToolResult<WriteGeneratedArtifactResult>>;
 };
 
@@ -218,7 +220,12 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
       });
     }),
     phasekit_verify_scope: (input) => runTool(async () => {
-      return prepareVerificationScope(input.scope);
+      return executeVerificationScope({
+        rootDir: resolveRootDir(input, defaultContext),
+        scope: input.scope,
+        approvedMissingCheckIds: input.approvedMissingCheckIds,
+        reviewStatus: input.reviewStatus,
+      });
     }),
     phasekit_write_artifact: (input) => runTool(async () => {
       return writeGeneratedArtifact({
@@ -450,10 +457,12 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
       },
     }),
     phasekit_verify_scope: tool({
-      description: "Prepare a Phasekit verification scope without executing commands or mutating repositories.",
+      description: "Execute approved scoped verification checks and persist verification evidence.",
       args: {
         rootDir: schema.string().optional(),
         scope: schema.unknown(),
+        approvedMissingCheckIds: schema.array(schema.string()).optional(),
+        reviewStatus: schema.enum(["passed", "failed", "skipped"]).optional(),
       },
       execute: async (args, context) => {
         const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));

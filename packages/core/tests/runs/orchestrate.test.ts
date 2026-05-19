@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { initializePlanningState, orchestrateRunPhase, readRunState, writeJsonFile } from "../../src/index";
+import { executeVerificationScope, initializePlanningState, orchestrateRunPhase, readRunState, writeJsonFile } from "../../src/index";
 
 const temporaryDirectories: string[] = [];
 
@@ -425,6 +425,75 @@ describe("run-phase orchestration", () => {
     const result = await orchestrateRunPhase({ rootDir, phaseId: "P11-T2" });
     expect(result.stage).toBe("execution");
     expect(result.next_required).toEqual({ kind: "execution_evidence", pending_task_ids: ["task-1"] });
+  });
+
+  test("failed verification repair follow-up is surfaced as execution evidence", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+    await writeJsonFile(join(rootDir, "package.json"), {
+      scripts: { test: "bun test" },
+    });
+    await writeJsonFile(join(rootDir, ".planning", "config.json"), {
+      verification: {
+        commands: {
+          test: { command: "bun test" },
+        },
+      },
+    });
+    await writeJsonFile(join(rootDir, ".planning", "requirements.json"), {
+      requirements: [{ id: "REQ-1", text: "Implement run-phase orchestration.", sources: [{ path: "prd.md" }] }],
+    });
+    await writeJsonFile(join(rootDir, ".planning", "phases.json"), {
+      phases: [
+        {
+          id: "P11-T2",
+          source_requirement_ids: ["REQ-1"],
+          expected_behavior: "One run-phase path advances through required gates.",
+          relevant_context: ["packages/core/src/runs"],
+          likely_change_areas: ["packages/core/src/runs/orchestrate.ts"],
+          test_strategy: ["bun test packages/core/tests/runs/orchestrate.test.ts"],
+          integration_risks: ["Gate bypass"],
+          done_criteria: ["Run-phase requires review and verification by default."],
+          status: "pending",
+        },
+      ],
+    });
+
+    await orchestrateRunPhase({ rootDir, phaseId: "P11-T2" });
+    const review = await orchestrateRunPhase({
+      rootDir,
+      phaseId: "P11-T2",
+      executionEvidence: [
+        {
+          task_id: "task-1",
+          evidence: {
+            check_results: [{ command: "bun test packages/core/tests/runs/orchestrate.test.ts", status: "passed" }],
+            changed_files: ["packages/core/src/runs/orchestrate.ts"],
+          },
+        },
+      ],
+    });
+    await orchestrateRunPhase({
+      rootDir,
+      phaseId: "P11-T2",
+      verificationRequestId:
+        review.next_required?.kind === "review_verification_request" ? review.next_required.request_id : undefined,
+      verificationResult: createVerificationResult("phase-P11-T2", "P11-T2"),
+    });
+
+    await executeVerificationScope({
+      rootDir,
+      scope: { kind: "phase", phase_id: "P11-T2" },
+      reviewStatus: "passed",
+      commandExecutor: async () => ({ ok: false, summary: "failed" }),
+    });
+
+    const result = await orchestrateRunPhase({ rootDir, phaseId: "P11-T2" });
+    expect(result.stage).toBe("execution");
+    expect(result.next_required).toEqual({
+      kind: "execution_evidence",
+      pending_task_ids: ["repair-P11-T2-test-1"],
+    });
   });
 
   test("rejects verification payloads not bound to active run and phase", async () => {
