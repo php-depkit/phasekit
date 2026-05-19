@@ -21,6 +21,13 @@ export type {
   GenerateAgentsMdArtifactOptions,
 } from "./artifacts/generate-agents-md";
 export {
+  generateProjectArtifactFile,
+  generateProjectArtifact,
+} from "./artifacts/project-artifacts";
+export type {
+  SupportedProjectArtifact,
+} from "./artifacts/project-artifacts";
+export {
   defaultConfig,
 } from "./config/defaults";
 export {
