@@ -121,6 +121,10 @@ async function writeRequirements(rootDir: string, requirements: { id: string; te
   );
 }
 
+async function writeRules(rootDir: string, rules: { id: string; category: string; text: string }[]): Promise<void> {
+  await writeTextFile(rootDir, ".planning/rules.json", `${JSON.stringify({ rules }, null, 2)}\n`);
+}
+
 async function writeRun(rootDir: string): Promise<void> {
   await writeTextFile(
     rootDir,
@@ -467,6 +471,45 @@ describe("@phasekit/opencode", () => {
     });
   });
 
+  test("generates AGENTS.md through core using canonical rules and managed overwrite policy", async () => {
+    await withTempDir(async (rootDir) => {
+      const tools = createPhasekitToolHandlers({ rootDir });
+      await tools.phasekit_init_project();
+      await writeRules(rootDir, [{ id: "rule-1", category: "workflow", text: "Keep scope narrow." }]);
+
+      const input = {
+        projectContext: {
+          projectName: "Phasekit",
+          stack: "TypeScript + Bun",
+          packageManager: "bun",
+          commandNames: ["/pk-status"],
+          toolNames: ["phasekit_generate_agents_md"],
+        },
+      };
+
+      const first = await tools.phasekit_generate_agents_md(input);
+      const firstContent = await readFile(join(rootDir, "AGENTS.md"), "utf8");
+      const second = await tools.phasekit_generate_agents_md(input);
+      const secondContent = await readFile(join(rootDir, "AGENTS.md"), "utf8");
+
+      expect(first).toEqual({ ok: true, data: { path: "AGENTS.md" } });
+      expect(second).toEqual({ ok: true, data: { path: "AGENTS.md" } });
+      expect(firstContent).toBe(secondContent);
+      expect(firstContent).toContain("<!-- phasekit:managed agents-md v1 -->");
+      expect(firstContent).toContain("### workflow");
+      expect(firstContent).toContain("`rule-1`: Keep scope narrow.");
+
+      await writeFile(join(rootDir, "AGENTS.md"), "# unmanaged\n", "utf8");
+      await expect(tools.phasekit_generate_agents_md(input)).resolves.toEqual({
+        ok: false,
+        error: {
+          code: "PHASEKIT_TOOL_ERROR",
+          message: "Refusing to overwrite unmanaged AGENTS.md content.",
+        },
+      });
+    });
+  });
+
   test("returns structured actionable errors for invalid advancement and artifact writes", async () => {
     await withTempDir(async (rootDir) => {
       const tools = createPhasekitToolHandlers({ rootDir });
@@ -500,6 +543,7 @@ describe("@phasekit/opencode", () => {
       "phasekit_claim_task",
       "phasekit_complete_task",
       "phasekit_create_run",
+      "phasekit_generate_agents_md",
       "phasekit_get_status",
       "phasekit_ingest_paths",
       "phasekit_init_project",
@@ -521,6 +565,7 @@ describe("@phasekit/opencode", () => {
       "phasekit_claim_task",
       "phasekit_complete_task",
       "phasekit_create_run",
+      "phasekit_generate_agents_md",
       "phasekit_get_status",
       "phasekit_ingest_paths",
       "phasekit_init_project",
@@ -733,6 +778,7 @@ describe("@phasekit/opencode", () => {
         "phasekit_claim_task",
         "phasekit_complete_task",
         "phasekit_create_run",
+        "phasekit_generate_agents_md",
         "phasekit_get_status",
         "phasekit_ingest_paths",
         "phasekit_init_project",

@@ -7,6 +7,7 @@ import {
   completeRunTask,
   describeCorePackage,
   getStatus,
+  generateAgentsMdArtifact,
   ingestProjectInputs,
   initializePlanningState,
   executeVerificationScope,
@@ -24,6 +25,7 @@ import {
   type VerificationResult,
   type CreateRunResult,
   type AddPhaseFromGoalResult,
+  type AgentsMdProjectContext,
   type RunPhaseOrchestrationResult,
   type RunState,
   type TaskPlan,
@@ -127,6 +129,9 @@ export type WriteArtifactInput = PhasekitToolContext & {
   path: string;
   content: string;
 };
+export type GenerateAgentsMdInput = PhasekitToolContext & {
+  projectContext: AgentsMdProjectContext;
+};
 
 export type PhasekitToolHandlers = {
   phasekit_init_project(input?: InitProjectInput): Promise<PhasekitToolResult<InitializePlanningStateResult>>;
@@ -143,6 +148,7 @@ export type PhasekitToolHandlers = {
   phasekit_advance(input: AdvanceInput): Promise<PhasekitToolResult<RunState>>;
   phasekit_verify_scope(input: VerifyScopeInput): Promise<PhasekitToolResult<VerificationResult>>;
   phasekit_write_artifact(input: WriteArtifactInput): Promise<PhasekitToolResult<WriteGeneratedArtifactResult>>;
+  phasekit_generate_agents_md(input: GenerateAgentsMdInput): Promise<PhasekitToolResult<WriteGeneratedArtifactResult>>;
 };
 
 export type PhasekitOpenCodeTools = {
@@ -243,6 +249,12 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
         approvedConfigArtifacts: createOpenCodeArtifactPolicy(),
         path: input.path,
         content: input.content,
+      });
+    }),
+    phasekit_generate_agents_md: (input) => runTool(async () => {
+      return generateAgentsMdArtifact({
+        rootDir: resolveRootDir(input, defaultContext),
+        projectContext: input.projectContext,
       });
     }),
   };
@@ -478,6 +490,32 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
         const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
 
         return toOpenCodeToolResult("Phasekit write artifact", await handlers.phasekit_write_artifact(args));
+      },
+    }),
+    phasekit_generate_agents_md: tool({
+      description: "Generate deterministic managed AGENTS.md from canonical rules and explicit project context.",
+      args: {
+        rootDir: schema.string().optional(),
+        projectContext: schema.object({
+          projectName: schema.string(),
+          stack: schema.string().optional(),
+          packageManager: schema.string().optional(),
+          languages: schema.array(schema.string()).optional(),
+          frameworks: schema.array(schema.string()).optional(),
+          architectureBoundaries: schema.array(schema.string()).optional(),
+          verificationCommands: schema.array(schema.string()).optional(),
+          commandNames: schema.array(schema.string()).optional(),
+          toolNames: schema.array(schema.string()).optional(),
+          globalPreferences: schema.array(schema.string()).optional(),
+        }),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult(
+          "Phasekit generate AGENTS.md",
+          await handlers.phasekit_generate_agents_md({ rootDir: args.rootDir, projectContext: args.projectContext }),
+        );
       },
     }),
     phasekit_verify_scope: tool({

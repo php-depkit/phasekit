@@ -15,6 +15,12 @@ export type {
   GenerateAgentsMdOptions,
 } from "./artifacts/agents-md";
 export {
+  generateAgentsMdArtifact,
+} from "./artifacts/generate-agents-md";
+export type {
+  GenerateAgentsMdArtifactOptions,
+} from "./artifacts/generate-agents-md";
+export {
   defaultConfig,
 } from "./config/defaults";
 export {
