@@ -26,6 +26,19 @@ export interface IngestProjectResult {
   phases: PhasesState;
 }
 
+export interface AddPhaseFromGoalOptions {
+  rootDir: string;
+  goal: string;
+  scout?: ContextScout;
+  slicer?: PhaseSlicer;
+}
+
+export interface AddPhaseFromGoalResult {
+  requirements: RequirementsState;
+  phases: PhasesState;
+  phase: PhasesState["phases"][number];
+}
+
 export async function ingestProjectInputs(options: IngestProjectOptions): Promise<IngestProjectResult> {
   const rootDir = resolve(options.rootDir);
   const planningDir = join(rootDir, ".planning");
@@ -67,6 +80,68 @@ export async function ingestProjectInputs(options: IngestProjectOptions): Promis
     inputs,
     requirements,
     phases,
+  };
+}
+
+export async function addPhaseFromGoal(options: AddPhaseFromGoalOptions): Promise<AddPhaseFromGoalResult> {
+  const goal = options.goal.trim();
+  if (goal === "") {
+    throw new Error("Add-phase goal must not be empty.");
+  }
+
+  const rootDir = resolve(options.rootDir);
+  const planningDir = join(rootDir, ".planning");
+  const goalSourceRelativePath = toGoalSourceRelativePath(goal);
+  const [project, existingRequirements, existingPhases] = await Promise.all([
+    readExistingProjectState(join(planningDir, "project.json")),
+    readExistingRequirementsState(join(planningDir, "requirements.json")),
+    readExistingPhasesState(join(planningDir, "phases.json")),
+  ]);
+
+  const context = toIngestContext(project);
+  const goalRequirements = await extractSourceRequirements({
+    inputs: [{ path: join(rootDir, goalSourceRelativePath), relativePath: goalSourceRelativePath, text: goal }],
+    existingState: existingRequirements,
+    context,
+    extractor: createGoalRequirementCandidates,
+  });
+  const requirements = mergeRequirements(existingRequirements, goalRequirements);
+  const scopedContext = await (options.scout ?? scoutCodebaseContext)({
+    rootPath: rootDir,
+    requirementIds: goalRequirements.requirements.map((requirement) => requirement.id),
+    confirmed_stack: context.confirmed_stack,
+  });
+  const slices = await (options.slicer ?? sliceRequirementsIntoPhases)({
+    requirements: goalRequirements.requirements,
+    context: scopedContext,
+    answeredQuestions: [],
+    confirmed_stack: context.confirmed_stack,
+  });
+
+  if (slices.length !== 1) {
+    throw new Error(`Add-phase must produce exactly one phase; received ${slices.length}.`);
+  }
+
+  validateRequirementCoverage({ requirements: goalRequirements.requirements, phases: slices });
+
+  const nextPhaseState = toPhasesState(slices);
+  const nextPhase = nextPhaseState.phases[0];
+  if (nextPhase === undefined) {
+    throw new Error("Add-phase failed to produce a phase.");
+  }
+
+  const phases = mergeSinglePhase(existingPhases, nextPhase);
+  validateRequirementCoverage({ requirements: requirements.requirements, phases: phases.phases });
+
+  await Promise.all([
+    writeJsonFile(join(planningDir, "requirements.json"), requirements),
+    writeJsonFile(join(planningDir, "phases.json"), phases),
+  ]);
+
+  return {
+    requirements,
+    phases,
+    phase: phases.phases.find((phase) => phase.id === nextPhase.id) ?? nextPhase,
   };
 }
 
@@ -127,6 +202,43 @@ function preserveExistingPhaseStatuses(nextState: PhasesState, existingState: Ph
         : phase.status,
     })),
   };
+}
+
+function mergeSinglePhase(existingState: PhasesState, nextPhase: PhasesState["phases"][number]): PhasesState {
+  const existingPhases = existingState.phases.filter((phase) => phase.id !== nextPhase.id);
+  const priorMatch = existingState.phases.find((phase) => phase.id === nextPhase.id);
+
+  existingPhases.push({
+    ...nextPhase,
+    status: shouldPreservePhaseStatus(priorMatch, nextPhase) ? priorMatch?.status ?? nextPhase.status : nextPhase.status,
+  });
+
+  return {
+    phases: existingPhases,
+  };
+}
+
+function mergeRequirements(existingState: RequirementsState, goalRequirements: RequirementsState): RequirementsState {
+  const byId = new Map(existingState.requirements.map((requirement) => [requirement.id, requirement] as const));
+
+  for (const requirement of goalRequirements.requirements) {
+    byId.set(requirement.id, requirement);
+  }
+
+  return {
+    requirements: [...byId.values()].sort((left, right) => compareRequirementIds(left.id, right.id)),
+  };
+}
+
+function compareRequirementIds(left: string, right: string): number {
+  const leftMatch = /^REQ-(\d+)$/.exec(left);
+  const rightMatch = /^REQ-(\d+)$/.exec(right);
+
+  if (leftMatch !== null && rightMatch !== null) {
+    return Number(leftMatch[1]) - Number(rightMatch[1]);
+  }
+
+  return compareStrings(left, right);
 }
 
 function shouldPreservePhaseStatus(existingPhase: PhasesState["phases"][number] | undefined, nextPhase: PhasesState["phases"][number]): boolean {
@@ -299,6 +411,35 @@ function extractPlainTextRequirementsFromInput(input: IngestTextInput) {
     }));
 }
 
+function createGoalRequirementCandidates(inputs: readonly IngestTextInput[]) {
+  const goalInput = inputs[0];
+  const goal = goalInput?.text.trim() ?? "";
+  if (goal === "") {
+    throw new Error("Add-phase goal must not be empty.");
+  }
+
+  return [{
+    text: `Short Goal: ${goal}`,
+    sources: [{ path: goalInput?.relativePath ?? ".planning/goal-input.txt", locator: "line:1" }] as const,
+  }];
+}
+
+function toGoalSourceRelativePath(goal: string): string {
+  return `.planning/goal-input-${stableGoalSuffix(goal)}.txt`;
+}
+
+function stableGoalSuffix(goal: string): string {
+  const normalizedGoal = goal.trim().toLowerCase();
+  let hash = 5381;
+
+  for (const character of normalizedGoal) {
+    hash = ((hash << 5) + hash) ^ character.charCodeAt(0);
+    hash |= 0;
+  }
+
+  return Math.abs(hash).toString(36);
+}
+
 export function sliceRequirementsIntoPhases(input: SliceSourceRequirementsInput) {
   const groups = new Map<string, SliceSourceRequirementsInput["requirements"] extends readonly (infer RequirementType)[] ? RequirementType[] : never>();
   const groupMetadata = new Map<string, { label: string; sourcePath: string }>();
@@ -329,7 +470,8 @@ export function sliceRequirementsIntoPhases(input: SliceSourceRequirementsInput)
     const label = metadata?.label ?? "Ingested Requirements";
     const sourcePath = metadata?.sourcePath ?? "";
     const requirements = groups.get(groupKey) ?? [];
-    const phaseId = (sourcePathsByLabel.get(label)?.size ?? 0) > 1
+    const includeSourceInPhaseId = (sourcePathsByLabel.get(label)?.size ?? 0) > 1 || sourcePath.startsWith(".planning/goal-input-");
+    const phaseId = includeSourceInPhaseId
       ? `INGEST-${slugify(label)}-${slugify(toSourcePhaseSlug(sourcePath))}`
       : `INGEST-${slugify(label)}`;
     const relevantContext = dedupe([

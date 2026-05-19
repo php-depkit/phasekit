@@ -1,6 +1,7 @@
 import { tool, type Plugin, type ToolDefinition, type ToolResult } from "@opencode-ai/plugin";
 import {
   createPhaseRun,
+  addPhaseFromGoal,
   advanceRunStage,
   claimRunTask,
   completeRunTask,
@@ -22,6 +23,7 @@ import {
   type PhasekitStatus,
   type VerificationResult,
   type CreateRunResult,
+  type AddPhaseFromGoalResult,
   type RunPhaseOrchestrationResult,
   type RunState,
   type TaskPlan,
@@ -73,6 +75,9 @@ export type StatusInput = PhasekitToolContext & Pick<GetStatusOptions, "runId">;
 export type NextActionInput = StatusInput;
 export type IngestPathsInput = PhasekitToolContext & {
   inputPaths: string[];
+};
+export type AddPhaseInput = PhasekitToolContext & {
+  goal: string;
 };
 export type CreateRunInput = PhasekitToolContext & {
   phaseId: string;
@@ -128,6 +133,7 @@ export type PhasekitToolHandlers = {
   phasekit_get_status(input?: StatusInput): Promise<PhasekitToolResult<PhasekitStatus>>;
   phasekit_next_action(input?: NextActionInput): Promise<PhasekitToolResult<NextAction>>;
   phasekit_ingest_paths(input: IngestPathsInput): Promise<PhasekitToolResult<IngestProjectResult>>;
+  phasekit_add_phase(input: AddPhaseInput): Promise<PhasekitToolResult<AddPhaseFromGoalResult>>;
   phasekit_create_run(input: CreateRunInput): Promise<PhasekitToolResult<CreateRunResult>>;
   phasekit_run_phase(input: RunPhaseInput): Promise<PhasekitToolResult<RunPhaseOrchestrationResult>>;
   phasekit_validate_plan(input: ValidatePlanInput): Promise<PhasekitToolResult<TaskPlan>>;
@@ -168,6 +174,9 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
     }),
     phasekit_ingest_paths: (input) => runTool(async () => {
       return ingestProjectInputs({ rootDir: resolveRootDir(input, defaultContext), inputPaths: input.inputPaths });
+    }),
+    phasekit_add_phase: (input) => runTool(async () => {
+      return addPhaseFromGoal({ rootDir: resolveRootDir(input, defaultContext), goal: input.goal });
     }),
     phasekit_create_run: (input) => runTool(async () => {
       return createPhaseRun({ rootDir: resolveRootDir(input, defaultContext), phaseId: input.phaseId });
@@ -296,6 +305,21 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
         return toOpenCodeToolResult(
           "Phasekit ingest paths",
           await handlers.phasekit_ingest_paths({ rootDir: args.rootDir, inputPaths: args.inputPaths }),
+        );
+      },
+    }),
+    phasekit_add_phase: tool({
+      description: "Create exactly one Phasekit phase from a short goal.",
+      args: {
+        rootDir: schema.string().optional(),
+        goal: schema.string(),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult(
+          "Phasekit add phase",
+          await handlers.phasekit_add_phase({ rootDir: args.rootDir, goal: args.goal }),
         );
       },
     }),

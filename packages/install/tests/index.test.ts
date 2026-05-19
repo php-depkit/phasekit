@@ -14,7 +14,7 @@ import {
   installPackageName,
 } from "../src/index";
 
-const commandNames = ["pk-init", "pk-status", "pk-next", "pk-config", "pk-ingest", "pk-run-phase", "pk-verify"] as const;
+const commandNames = ["pk-init", "pk-status", "pk-next", "pk-config", "pk-ingest", "pk-add-phase", "pk-run-phase", "pk-verify"] as const;
 
 const agentNames = [
   "orchestrator",
@@ -68,8 +68,27 @@ describe("@phasekit/install", () => {
       await expectCommandContent(configRoot, "pk-next", "phasekit_next_action");
       await expectCommandContent(configRoot, "pk-config", "phasekit_get_status");
       await expectCommandContent(configRoot, "pk-ingest", "phasekit_ingest_paths");
+      await expectCommandContent(configRoot, "pk-add-phase", "phasekit_add_phase");
       await expectCommandContent(configRoot, "pk-run-phase", "phasekit_run_phase");
       await expectCommandContent(configRoot, "pk-verify", "phasekit_verify_scope");
+    });
+  });
+
+  test("generates a thin pk-add-phase command wrapper", async () => {
+    await withTempDir(async (configRoot) => {
+      const artifact = generateOpenCodeCommandArtifacts({ configRoot }).find(({ name }) => name === "pk-add-phase");
+
+      if (artifact === undefined) {
+        throw new Error("Missing pk-add-phase generated artifact.");
+      }
+
+      expect(artifact.path).toBe(join(configRoot, "opencode", "commands", "pk-add-phase.md"));
+      expect(artifact.content).toContain("# /pk-add-phase");
+      expect(artifact.content).toContain("phasekit_add_phase");
+      expect(artifact.content).toContain("goal");
+      expect(artifact.content).toContain("user-provided goal");
+      expect(artifact.content).not.toContain("extractSourceRequirements");
+      expect(artifact.content).not.toContain("sliceRequirementsIntoPhases");
     });
   });
 

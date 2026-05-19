@@ -113,11 +113,14 @@ export type {
   IngestTextInput,
 } from "./ingest/paths";
 export {
+  addPhaseFromGoal,
   extractRequirementsFromSupportedText,
   ingestProjectInputs,
   sliceRequirementsIntoPhases,
 } from "./ingest/project";
 export type {
+  AddPhaseFromGoalOptions,
+  AddPhaseFromGoalResult,
   IngestProjectOptions,
   IngestProjectResult,
 } from "./ingest/project";

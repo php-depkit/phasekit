@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { afterEach, describe, expect, test } from "bun:test";
 
 import {
+  addPhaseFromGoal,
   ingestProjectInputs,
   initializePlanningState,
   readJsonFile,
@@ -33,6 +34,83 @@ async function writeTextFile(rootDir: string, relativePath: string, text: string
 }
 
 describe("project ingest pipeline", () => {
+  test("adds exactly one phase from a short goal and persists stable requirement ids", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+
+    const first = await addPhaseFromGoal({ rootDir, goal: "Wire pk-add-phase through native tooling." });
+    const second = await addPhaseFromGoal({ rootDir, goal: "Wire pk-add-phase through native tooling." });
+
+    expect(first.requirements.requirements.map((requirement) => requirement.id)).toEqual(["REQ-1"]);
+    expect(first.phase.source_requirement_ids).toEqual(["REQ-1"]);
+    expect(first.phases.phases).toHaveLength(1);
+    expect(first.phase.id.startsWith("INGEST-short-goal")).toBe(true);
+    expect(first.phase.relevant_context.length).toBeGreaterThan(0);
+
+    expect(second.requirements.requirements).toEqual(first.requirements.requirements);
+    expect(second.phase.id).toBe(first.phase.id);
+
+    await expect(readJsonFile(join(rootDir, ".planning", "requirements.json"), requirementsStateSchema)).resolves.toEqual(second.requirements);
+    await expect(readJsonFile(join(rootDir, ".planning", "phases.json"), phasesStateSchema)).resolves.toEqual(second.phases);
+  });
+
+  test("preserves existing requirements and phase links when adding one phase after ingest", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+    await writeTextFile(rootDir, "prd.md", [
+      "# Product",
+      "",
+      "**Story 1: Inputs**",
+      "Acceptance criteria:",
+      "- Accept one input path.",
+      "",
+    ].join("\n"));
+
+    const ingested = await ingestProjectInputs({ rootDir, inputPaths: ["prd.md"] });
+    const ingestedRequirementIds = ingested.requirements.requirements.map((requirement) => requirement.id);
+
+    const added = await addPhaseFromGoal({ rootDir, goal: "Add a focused phase for add-phase." });
+
+    expect(added.requirements.requirements.map((requirement) => requirement.id)).toEqual([
+      ...ingestedRequirementIds,
+      "REQ-2",
+    ]);
+    expect(added.phases.phases.some((phase) => phase.id === "INGEST-inputs")).toBe(true);
+    expect(added.phases.phases.some((phase) => phase.id.startsWith("INGEST-short-goal"))).toBe(true);
+    expect(added.phase.source_requirement_ids).toEqual(["REQ-2"]);
+
+    const requirementIdSet = new Set(added.requirements.requirements.map((requirement) => requirement.id));
+    for (const phase of added.phases.phases) {
+      for (const requirementId of phase.source_requirement_ids) {
+        expect(requirementIdSet.has(requirementId)).toBe(true);
+      }
+    }
+  });
+
+  test("persists distinct phases for two different short goals and keeps requirement links valid", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+
+    const first = await addPhaseFromGoal({ rootDir, goal: "Wire pk-add-phase through native tooling." });
+    const second = await addPhaseFromGoal({ rootDir, goal: "Add coverage for add-phase requirement linkage." });
+
+    expect(first.phase.id.startsWith("INGEST-short-goal")).toBe(true);
+    expect(second.phase.id.startsWith("INGEST-short-goal")).toBe(true);
+    expect(second.phase.id).not.toBe(first.phase.id);
+    expect(second.phases.phases).toHaveLength(2);
+
+    const phaseIds = new Set(second.phases.phases.map((phase) => phase.id));
+    expect(phaseIds.has(first.phase.id)).toBe(true);
+    expect(phaseIds.has(second.phase.id)).toBe(true);
+
+    const requirementIdSet = new Set(second.requirements.requirements.map((requirement) => requirement.id));
+    for (const phase of second.phases.phases) {
+      for (const requirementId of phase.source_requirement_ids) {
+        expect(requirementIdSet.has(requirementId)).toBe(true);
+      }
+    }
+  });
+
   test("writes deterministic requirements and phases through the ingest pipeline", async () => {
     const rootDir = await createTempDirectory();
     await initializePlanningState(rootDir);

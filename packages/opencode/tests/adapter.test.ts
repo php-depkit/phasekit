@@ -272,6 +272,25 @@ describe("@phasekit/opencode", () => {
     });
   });
 
+  test("adds one phase from a short goal through a core-backed tool", async () => {
+    await withTempDir(async (rootDir) => {
+      const tools = createPhasekitToolHandlers({ rootDir });
+      await tools.phasekit_init_project();
+
+      const result = await tools.phasekit_add_phase({ goal: "Add a command wrapper for pk-add-phase." });
+
+      expect(result.ok).toBe(true);
+      if (!result.ok) {
+        throw new Error(result.error.message);
+      }
+
+      expect(result.data.phase.id.startsWith("INGEST-short-goal")).toBe(true);
+      expect(result.data.phase.source_requirement_ids).toEqual(["REQ-1"]);
+      expect(result.data.phases.phases).toHaveLength(1);
+      expect(result.data.requirements.requirements[0]?.text).toBe("Short Goal: Add a command wrapper for pk-add-phase.");
+    });
+  });
+
   test("creates or resumes a run through a core-backed tool", async () => {
     await withTempDir(async (rootDir) => {
       const tools = createPhasekitToolHandlers({ rootDir });
@@ -476,6 +495,7 @@ describe("@phasekit/opencode", () => {
 
   test("does not expose runtime slash command or agent registration", () => {
     expect(Object.keys(createPhasekitToolHandlers()).sort()).toEqual([
+      "phasekit_add_phase",
       "phasekit_advance",
       "phasekit_claim_task",
       "phasekit_complete_task",
@@ -496,6 +516,7 @@ describe("@phasekit/opencode", () => {
     const tools = createPhasekitOpenCodeTools();
 
     expect(Object.keys(tools).sort()).toEqual([
+      "phasekit_add_phase",
       "phasekit_advance",
       "phasekit_claim_task",
       "phasekit_complete_task",
@@ -707,6 +728,7 @@ describe("@phasekit/opencode", () => {
 
       expect(Object.keys(hooks).sort()).toEqual(["tool"]);
       expect(Object.keys(hooks.tool ?? {}).sort()).toEqual([
+        "phasekit_add_phase",
         "phasekit_advance",
         "phasekit_claim_task",
         "phasekit_complete_task",
