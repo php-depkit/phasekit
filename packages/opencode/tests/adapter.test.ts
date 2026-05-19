@@ -273,6 +273,36 @@ describe("@phasekit/opencode", () => {
     });
   });
 
+  test("next-action tool is advisory and does not advance run stage", async () => {
+    await withTempDir(async (rootDir) => {
+      const tools = createPhasekitToolHandlers({ rootDir });
+
+      await tools.phasekit_init_project();
+      await writeRequirements(rootDir, [{ id: "REQ-1", text: "Do one run.", locator: "story-1" }]);
+      await writePhases(rootDir, [{ id: "P1", status: "pending" }]);
+
+      const runResult = await tools.phasekit_create_run({ phaseId: "P1" });
+      expect(runResult.ok).toBe(true);
+      if (!runResult.ok) {
+        throw new Error(runResult.error.message);
+      }
+
+      const beforeStatus = await tools.phasekit_get_status({ runId: runResult.data.run.id });
+      const nextAction = await tools.phasekit_next_action({ runId: runResult.data.run.id });
+      const afterStatus = await tools.phasekit_get_status({ runId: runResult.data.run.id });
+
+      expect(beforeStatus.ok).toBe(true);
+      expect(nextAction.ok).toBe(true);
+      expect(afterStatus.ok).toBe(true);
+      if (!beforeStatus.ok || !afterStatus.ok || !nextAction.ok) {
+        throw new Error("Expected advisory next-action flow to succeed.");
+      }
+
+      expect(afterStatus.data.current_run?.id).toBe(beforeStatus.data.current_run?.id);
+      expect(afterStatus.data.current_run?.stage).toBe(beforeStatus.data.current_run?.stage);
+    });
+  });
+
   test("converts core failures into structured actionable errors", async () => {
     await withTempDir(async (rootDir) => {
       const tools = createPhasekitToolHandlers({ rootDir });

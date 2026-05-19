@@ -136,6 +136,22 @@ describe("@phasekit/install", () => {
     });
   });
 
+  test("generates a non-mutating pk-next command wrapper", async () => {
+    await withTempDir(async (configRoot) => {
+      const artifact = generateOpenCodeCommandArtifacts({ configRoot }).find(({ name }) => name === "pk-next");
+
+      if (artifact === undefined) {
+        throw new Error("Missing pk-next generated artifact.");
+      }
+
+      expect(artifact.path).toBe(join(configRoot, "opencode", "commands", "pk-next.md"));
+      expect(artifact.content).toContain("# /pk-next");
+      expect(artifact.content).toContain("phasekit_next_action");
+      expect(artifact.content).toContain("do not advance state");
+      expect(artifact.content).not.toContain("phasekit_advance");
+    });
+  });
+
   test("generates a thin pk-verify command wrapper", async () => {
     await withTempDir(async (configRoot) => {
       const artifact = generateOpenCodeCommandArtifacts({ configRoot }).find(({ name }) => name === "pk-verify");
