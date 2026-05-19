@@ -1,4 +1,6 @@
 import { tool, type Plugin, type ToolDefinition, type ToolResult } from "@opencode-ai/plugin";
+import { readFile } from "node:fs/promises";
+import { basename } from "node:path";
 import {
   createPhaseRun,
   addPhaseFromGoal,
@@ -33,6 +35,7 @@ import {
   type TaskPlan,
   type WriteGeneratedArtifactResult,
 } from "@phasekit/core";
+import { installOpenCodeBootstrapArtifacts } from "@phasekit/install";
 
 export const opencodePackageName = "@phasekit/opencode" as const;
 const opencodeCommandManagedMarker = "<!-- phasekit:managed opencode-command v1 -->";
@@ -172,13 +175,23 @@ export function describeOpenCodeAdapter(): {
 export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext = {}): PhasekitToolHandlers {
   return {
     phasekit_init_project: (input = {}) => runTool(async () => {
-      return initializePlanningState(resolveRootDir(input, defaultContext), {
+      const rootDir = resolveRootDir(input, defaultContext);
+      const configRoot = resolveConfigRoot(input, defaultContext);
+      const initResult = await initializePlanningState(rootDir, {
         config: input.config,
-        configRoot: resolveConfigRoot(input, defaultContext),
+        configRoot,
         verificationCommandAnswer: input.verificationCommandAnswer,
         stackAnswer: input.stackAnswer,
         confirmationAnswer: input.confirmationAnswer,
       });
+
+      await installOpenCodeBootstrapArtifacts({ configRoot });
+      await generateAgentsMdArtifact({
+        rootDir,
+        projectContext: await buildInitAgentsContext(rootDir, initResult),
+      });
+
+      return initResult;
     }),
     phasekit_get_status: (input = {}) => runTool(async () => {
       return getStatus({ rootDir: resolveRootDir(input, defaultContext), runId: input.runId });
@@ -276,6 +289,68 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
       });
     }),
   };
+}
+
+const phasekitCommandNames = [
+  "/pk-init",
+  "/pk-status",
+  "/pk-next",
+  "/pk-config",
+  "/pk-ingest",
+  "/pk-add-phase",
+  "/pk-run-phase",
+  "/pk-verify",
+] as const;
+
+const phasekitToolNames = [
+  "phasekit_init_project",
+  "phasekit_get_status",
+  "phasekit_next_action",
+  "phasekit_ingest_paths",
+  "phasekit_add_phase",
+  "phasekit_create_run",
+  "phasekit_run_phase",
+  "phasekit_validate_plan",
+  "phasekit_claim_task",
+  "phasekit_complete_task",
+  "phasekit_record_blocker",
+  "phasekit_advance",
+  "phasekit_verify_scope",
+  "phasekit_write_artifact",
+  "phasekit_generate_agents_md",
+] as const;
+
+async function buildInitAgentsContext(
+  rootDir: string,
+  initResult: InitializePlanningStateResult,
+): Promise<AgentsMdProjectContext> {
+  const packageMetadata = await readRootPackageMetadata(rootDir);
+
+  return {
+    projectName: packageMetadata?.name ?? basename(rootDir),
+    stack: initResult.stack_decision.kind === "confirmed" ? initResult.stack_decision.stack : undefined,
+    packageManager: initResult.discovery.package_manager === "unknown" ? undefined : initResult.discovery.package_manager,
+    verificationCommands: [
+      ...initResult.discovery.test_commands,
+      ...initResult.discovery.build_commands,
+    ],
+    commandNames: [...phasekitCommandNames],
+    toolNames: [...phasekitToolNames],
+    architectureBoundaries: [
+      "v1 is OpenCode-only with a harness-agnostic core.",
+      "OpenCode plugin tools are the executable surface.",
+      "OpenCode commands and agents are generated markdown artifacts; no runtime registration.",
+      "Canonical shared state lives in committed .planning JSON files.",
+    ],
+  };
+}
+
+async function readRootPackageMetadata(rootDir: string): Promise<{ name?: string } | undefined> {
+  try {
+    return JSON.parse(await readFile(`${rootDir}/package.json`, "utf8")) as { name?: string };
+  } catch {
+    return undefined;
+  }
 }
 
 export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext = {}): PhasekitOpenCodeTools {

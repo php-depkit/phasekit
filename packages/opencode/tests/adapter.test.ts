@@ -176,7 +176,8 @@ describe("@phasekit/opencode", () => {
 
   test("initializes planning state through a core-backed tool", async () => {
     await withTempDir(async (rootDir) => {
-      const tools = createPhasekitToolHandlers({ rootDir });
+      const configRoot = join(rootDir, ".config-test");
+      const tools = createPhasekitToolHandlers({ rootDir, configRoot });
       const result = await tools.phasekit_init_project();
 
       expect(result.ok).toBe(true);
@@ -187,6 +188,13 @@ describe("@phasekit/opencode", () => {
       expect(result.data.createdPaths).toContain(".planning/project.json");
       expect(result.data.createdPaths).toContain(".planning/config.json");
       expect(result.data.verification_commands.stored_in_project_config).toBe(false);
+      expect(await readFile(join(configRoot, "opencode", "commands", "pk-init.md"), "utf8")).toContain(
+        "phasekit_init_project",
+      );
+      expect(await readFile(join(configRoot, "opencode", "agents", "orchestrator.md"), "utf8")).toContain(
+        "Phasekit sub-agent stub",
+      );
+      expect(await readFile(join(rootDir, "AGENTS.md"), "utf8")).toContain("<!-- phasekit:managed agents-md v1 -->");
     });
   });
 
@@ -198,7 +206,7 @@ describe("@phasekit/opencode", () => {
         `${JSON.stringify({ packageManager: "bun@1.1.0", scripts: { test: "bun test" } }, null, 2)}\n`,
       );
 
-      const tools = createPhasekitToolHandlers({ rootDir });
+      const tools = createPhasekitToolHandlers({ rootDir, configRoot: join(rootDir, ".config-test") });
       await tools.phasekit_init_project();
       const approved = await tools.phasekit_init_project({
         verificationCommandAnswer: {
@@ -220,6 +228,25 @@ describe("@phasekit/opencode", () => {
           verification_commands: {
             stored_in_project_config: true,
           },
+        },
+      });
+    });
+  });
+
+  test("init keeps managed-marker overwrite protections for bootstrap artifacts", async () => {
+    await withTempDir(async (rootDir) => {
+      const configRoot = join(rootDir, ".config-test");
+      const tools = createPhasekitToolHandlers({ rootDir, configRoot });
+
+      await tools.phasekit_init_project();
+      await writeFile(join(configRoot, "opencode", "commands", "pk-status.md"), "unmanaged\n", "utf8");
+
+      const result = await tools.phasekit_init_project();
+      expect(result).toEqual({
+        ok: false,
+        error: {
+          code: "PHASEKIT_TOOL_ERROR",
+          message: `Refusing to overwrite unmanaged OpenCode command artifact: ${join(configRoot, "opencode", "commands", "pk-status.md")}`,
         },
       });
     });
@@ -660,7 +687,7 @@ describe("@phasekit/opencode", () => {
   test("native OpenCode tools execute through the core-backed handlers", async () => {
     await withTempDir(async (rootDir) => {
       const context = createToolContext(rootDir);
-      const tools = createPhasekitOpenCodeTools();
+      const tools = createPhasekitOpenCodeTools({ rootDir, configRoot: join(rootDir, ".config-test") });
 
       const init = await tools.phasekit_init_project.execute({}, context);
       const status = await tools.phasekit_get_status.execute({}, context);
@@ -719,7 +746,7 @@ describe("@phasekit/opencode", () => {
   test("phasekit_run_phase tool requires a second request-bound verification call", async () => {
     await withTempDir(async (rootDir) => {
       const context = createToolContext(rootDir);
-      const tools = createPhasekitOpenCodeTools();
+      const tools = createPhasekitOpenCodeTools({ rootDir, configRoot: join(rootDir, ".config-test") });
 
       await tools.phasekit_init_project.execute({}, context);
       await writeRequirements(rootDir, [{ id: "REQ-1", text: "Run the phase end to end.", locator: "Story 4" }]);

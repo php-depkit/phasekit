@@ -40,6 +40,8 @@ export type InstallOpenCodeCommandArtifactsOptions = {
 
 export type InstallOpenCodeAgentArtifactsOptions = InstallOpenCodeCommandArtifactsOptions;
 
+export type InstallOpenCodeBootstrapArtifactsOptions = InstallOpenCodeCommandArtifactsOptions;
+
 export type InstallOpenCodeCommandArtifactsResult = {
   commandsDir: string;
   artifacts: OpenCodeCommandArtifact[];
@@ -48,6 +50,11 @@ export type InstallOpenCodeCommandArtifactsResult = {
 export type InstallOpenCodeAgentArtifactsResult = {
   agentsDir: string;
   artifacts: OpenCodeAgentArtifact[];
+};
+
+export type InstallOpenCodeBootstrapArtifactsResult = {
+  commands: InstallOpenCodeCommandArtifactsResult;
+  agents: InstallOpenCodeAgentArtifactsResult;
 };
 
 export function describeInstallPackage(): { name: typeof installPackageName } {
@@ -116,6 +123,18 @@ export async function installOpenCodeAgentArtifacts(
   }
 
   return { agentsDir, artifacts };
+}
+
+export async function installOpenCodeBootstrapArtifacts(
+  options: InstallOpenCodeBootstrapArtifactsOptions = {},
+): Promise<InstallOpenCodeBootstrapArtifactsResult> {
+  const commands = await installOpenCodeCommandArtifacts(options);
+  const agents = await installOpenCodeAgentArtifacts(options);
+
+  return {
+    commands,
+    agents,
+  };
 }
 
 type CommandTemplate = {

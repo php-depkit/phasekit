@@ -10,6 +10,7 @@ import {
   getOpenCodeAgentsDir,
   getOpenCodeCommandsDir,
   installOpenCodeAgentArtifacts,
+  installOpenCodeBootstrapArtifacts,
   installOpenCodeCommandArtifacts,
   installPackageName,
 } from "../src/index";
@@ -224,6 +225,17 @@ describe("@phasekit/install", () => {
       for (const name of agentNames) {
         await expectAgentContent(configRoot, name);
       }
+    });
+  });
+
+  test("installs command and agent bootstrap artifacts through one deterministic path", async () => {
+    await withTempDir(async (configRoot) => {
+      const result = await installOpenCodeBootstrapArtifacts({ configRoot });
+
+      expect(result.commands.commandsDir).toBe(join(configRoot, "opencode", "commands"));
+      expect(result.agents.agentsDir).toBe(join(configRoot, "opencode", "agents"));
+      expect(result.commands.artifacts.map((artifact) => artifact.name)).toEqual([...commandNames]);
+      expect(result.agents.artifacts.map((artifact) => artifact.name)).toEqual([...agentNames]);
     });
   });
 

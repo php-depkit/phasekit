@@ -9,6 +9,7 @@
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.15.0",
-    "@phasekit/core": "workspace:*"
+    "@phasekit/core": "workspace:*",
+    "@phasekit/install": "workspace:*"
   }
 }
