@@ -3,6 +3,7 @@ import { extname, join, relative, resolve, sep } from "node:path";
 
 import type { ContextScout, PhaseSlicer, SliceSourceRequirementsInput } from "../planning/slices";
 import { toPhasesState, validateRequirementCoverage } from "../planning/slices";
+import { validateGrillMeQuestionAnswer, type GrillMeQuestion, type GrillMeQuestionAnswer } from "../planning/slices";
 import { defaultPhasesState, defaultProjectState, defaultRequirementsState } from "../state/defaults";
 import { readJsonFile, writeJsonFile } from "../state/json";
 import { phasesStateSchema, projectStateSchema, requirementsStateSchema, type PhasesState, type ProjectState, type RequirementsState } from "../state/schema";
@@ -31,13 +32,25 @@ export interface AddPhaseFromGoalOptions {
   goal: string;
   scout?: ContextScout;
   slicer?: PhaseSlicer;
+  questionAnswer?: GrillMeQuestionAnswer;
 }
 
-export interface AddPhaseFromGoalResult {
-  requirements: RequirementsState;
-  phases: PhasesState;
-  phase: PhasesState["phases"][number];
-}
+export type AddPhaseFromGoalResult =
+  | {
+      kind: "phase_created";
+      requirements: RequirementsState;
+      phases: PhasesState;
+      phase: PhasesState["phases"][number];
+    }
+  | {
+      kind: "question";
+      question: GrillMeQuestion;
+    }
+  | {
+      kind: "blocked";
+      reason: string;
+      next_step: string;
+    };
 
 export async function ingestProjectInputs(options: IngestProjectOptions): Promise<IngestProjectResult> {
   const rootDir = resolve(options.rootDir);
@@ -84,10 +97,18 @@ export async function ingestProjectInputs(options: IngestProjectOptions): Promis
 }
 
 export async function addPhaseFromGoal(options: AddPhaseFromGoalOptions): Promise<AddPhaseFromGoalResult> {
-  const goal = options.goal.trim();
-  if (goal === "") {
+  const rawGoal = options.goal.trim();
+  if (rawGoal === "") {
     throw new Error("Add-phase goal must not be empty.");
   }
+
+  const question = createAddPhaseGoalQuestion(rawGoal);
+  const goalResolution = resolveAddPhaseGoal(rawGoal, question, options.questionAnswer);
+  if (goalResolution.kind !== "resolved") {
+    return goalResolution;
+  }
+
+  const goal = goalResolution.goal;
 
   const rootDir = resolve(options.rootDir);
   const planningDir = join(rootDir, ".planning");
@@ -139,10 +160,79 @@ export async function addPhaseFromGoal(options: AddPhaseFromGoalOptions): Promis
   ]);
 
   return {
+    kind: "phase_created",
     requirements,
     phases,
     phase: phases.phases.find((phase) => phase.id === nextPhase.id) ?? nextPhase,
   };
+}
+
+function resolveAddPhaseGoal(goal: string, question: GrillMeQuestion, answer?: GrillMeQuestionAnswer):
+  | { kind: "resolved"; goal: string }
+  | { kind: "question"; question: GrillMeQuestion }
+  | { kind: "blocked"; reason: string; next_step: string } {
+  if (!isAmbiguousAddPhaseGoal(goal)) {
+    return { kind: "resolved", goal };
+  }
+
+  if (answer === undefined) {
+    return {
+      kind: "question",
+      question,
+    };
+  }
+
+  const validatedAnswer = validateGrillMeQuestionAnswer(answer);
+  if (validatedAnswer.question.id !== question.id) {
+    return {
+      kind: "blocked",
+      reason: `Add-phase goal answer question id ${validatedAnswer.question.id} does not match expected ${question.id}.`,
+      next_step: "Answer the active add-phase clarification question before planning.",
+    };
+  }
+
+  if (validatedAnswer.custom_answer_text === undefined) {
+    return {
+      kind: "blocked",
+      reason: "Ambiguous add-phase goals require a concrete custom goal answer before phase creation.",
+      next_step: "Provide a custom answer with specific behavior, scope, and checks.",
+    };
+  }
+
+  return {
+    kind: "resolved",
+    goal: validatedAnswer.custom_answer_text.trim(),
+  };
+}
+
+function createAddPhaseGoalQuestion(goal: string): GrillMeQuestion {
+  return {
+    id: "add-phase-goal-clarification",
+    requirement_ids: ["short-goal"],
+    prompt: `The add-phase goal \"${goal}\" is ambiguous for no-assumptions planning. What exact phase goal should be persisted?`,
+    options: [
+      {
+        id: "provide-precise-goal",
+        text: "Provide a precise goal with concrete scope, expected behavior, and checks.",
+        recommended: true,
+      },
+    ],
+    custom_answer: {
+      enabled: true,
+      label: "Exact add-phase goal to use",
+    },
+  };
+}
+
+function isAmbiguousAddPhaseGoal(goal: string): boolean {
+  const normalized = goal.trim().toLowerCase();
+  const words = normalized.split(/\s+/).filter((word) => word !== "");
+  if (words.length <= 3) {
+    return true;
+  }
+
+  return /\b(stuff|things|something|misc|cleanup|improve|fixes?)\b/.test(normalized)
+    && !/\b(in|for|on|with|through|across)\b/.test(normalized);
 }
 
 async function readExistingProjectState(filePath: string): Promise<ProjectState> {

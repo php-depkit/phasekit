@@ -324,10 +324,44 @@ describe("@phasekit/opencode", () => {
         throw new Error(result.error.message);
       }
 
+      expect(result.data.kind).toBe("phase_created");
+      if (result.data.kind !== "phase_created") {
+        throw new Error("Expected add-phase creation result.");
+      }
+
       expect(result.data.phase.id.startsWith("INGEST-short-goal")).toBe(true);
       expect(result.data.phase.source_requirement_ids).toEqual(["REQ-1"]);
       expect(result.data.phases.phases).toHaveLength(1);
       expect(result.data.requirements.requirements[0]?.text).toBe("Short Goal: Add a command wrapper for pk-add-phase.");
+    });
+  });
+
+  test("returns question then creates phase for ambiguous add-phase goal", async () => {
+    await withTempDir(async (rootDir) => {
+      const tools = createPhasekitToolHandlers({ rootDir });
+      await tools.phasekit_init_project();
+
+      const questioned = await tools.phasekit_add_phase({ goal: "fix stuff" });
+      expect(questioned.ok).toBe(true);
+      if (!questioned.ok) {
+        throw new Error(questioned.error.message);
+      }
+      expect(questioned.data).toMatchObject({ kind: "question", question: { id: "add-phase-goal-clarification" } });
+
+      const created = await tools.phasekit_add_phase({
+        goal: "fix stuff",
+        questionAnswer: {
+          question: { id: "add-phase-goal-clarification", prompt: "Clarify" },
+          requirement_ids: ["short-goal"],
+          custom_answer_text: "Add focused add-phase ambiguity tests and blocking behavior.",
+        },
+      });
+
+      expect(created.ok).toBe(true);
+      if (!created.ok) {
+        throw new Error(created.error.message);
+      }
+      expect(created.data.kind).toBe("phase_created");
     });
   });
 

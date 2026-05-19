@@ -41,6 +41,12 @@ describe("project ingest pipeline", () => {
     const first = await addPhaseFromGoal({ rootDir, goal: "Wire pk-add-phase through native tooling." });
     const second = await addPhaseFromGoal({ rootDir, goal: "Wire pk-add-phase through native tooling." });
 
+    expect(first.kind).toBe("phase_created");
+    expect(second.kind).toBe("phase_created");
+    if (first.kind !== "phase_created" || second.kind !== "phase_created") {
+      throw new Error("Expected add-phase creation results.");
+    }
+
     expect(first.requirements.requirements.map((requirement) => requirement.id)).toEqual(["REQ-1"]);
     expect(first.phase.source_requirement_ids).toEqual(["REQ-1"]);
     expect(first.phases.phases).toHaveLength(1);
@@ -71,6 +77,11 @@ describe("project ingest pipeline", () => {
 
     const added = await addPhaseFromGoal({ rootDir, goal: "Add a focused phase for add-phase." });
 
+    expect(added.kind).toBe("phase_created");
+    if (added.kind !== "phase_created") {
+      throw new Error("Expected add-phase creation result.");
+    }
+
     expect(added.requirements.requirements.map((requirement) => requirement.id)).toEqual([
       ...ingestedRequirementIds,
       "REQ-2",
@@ -94,6 +105,12 @@ describe("project ingest pipeline", () => {
     const first = await addPhaseFromGoal({ rootDir, goal: "Wire pk-add-phase through native tooling." });
     const second = await addPhaseFromGoal({ rootDir, goal: "Add coverage for add-phase requirement linkage." });
 
+    expect(first.kind).toBe("phase_created");
+    expect(second.kind).toBe("phase_created");
+    if (first.kind !== "phase_created" || second.kind !== "phase_created") {
+      throw new Error("Expected add-phase creation results.");
+    }
+
     expect(first.phase.id.startsWith("INGEST-short-goal")).toBe(true);
     expect(second.phase.id.startsWith("INGEST-short-goal")).toBe(true);
     expect(second.phase.id).not.toBe(first.phase.id);
@@ -109,6 +126,76 @@ describe("project ingest pipeline", () => {
         expect(requirementIdSet.has(requirementId)).toBe(true);
       }
     }
+  });
+
+  test("returns a clarification question for ambiguous short goals without persisting state", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+
+    const result = await addPhaseFromGoal({ rootDir, goal: "fix stuff" });
+
+    expect(result).toMatchObject({ kind: "question", question: { id: "add-phase-goal-clarification" } });
+    await expect(readJsonFile(join(rootDir, ".planning", "requirements.json"), requirementsStateSchema)).resolves.toEqual({
+      requirements: [],
+    });
+    await expect(readJsonFile(join(rootDir, ".planning", "phases.json"), phasesStateSchema)).resolves.toEqual({ phases: [] });
+  });
+
+  test("blocks ambiguous short goals when answer does not provide custom details", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+
+    const result = await addPhaseFromGoal({
+      rootDir,
+      goal: "fix stuff",
+      questionAnswer: {
+        question: {
+          id: "add-phase-goal-clarification",
+          prompt: "Clarify",
+        },
+        requirement_ids: ["short-goal"],
+        selected_recommended_option: {
+          id: "provide-precise-goal",
+          text: "Provide a precise goal with concrete scope, expected behavior, and checks.",
+        },
+      },
+    });
+
+    expect(result).toMatchObject({ kind: "blocked" });
+    await expect(readJsonFile(join(rootDir, ".planning", "requirements.json"), requirementsStateSchema)).resolves.toEqual({
+      requirements: [],
+    });
+    await expect(readJsonFile(join(rootDir, ".planning", "phases.json"), phasesStateSchema)).resolves.toEqual({ phases: [] });
+  });
+
+  test("creates a phase for ambiguous short goals only after custom clarification answer", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+
+    const questioned = await addPhaseFromGoal({ rootDir, goal: "fix stuff" });
+    expect(questioned.kind).toBe("question");
+
+    const created = await addPhaseFromGoal({
+      rootDir,
+      goal: "fix stuff",
+      questionAnswer: {
+        question: {
+          id: "add-phase-goal-clarification",
+          prompt: "Clarify",
+        },
+        requirement_ids: ["short-goal"],
+        custom_answer_text: "Add focused add-phase tests for ambiguity blockers and question handling.",
+      },
+    });
+
+    expect(created.kind).toBe("phase_created");
+    if (created.kind !== "phase_created") {
+      throw new Error("Expected add-phase creation result.");
+    }
+    expect(created.requirements.requirements[0]?.text).toBe(
+      "Short Goal: Add focused add-phase tests for ambiguity blockers and question handling.",
+    );
+    expect(created.phases.phases).toHaveLength(1);
   });
 
   test("writes deterministic requirements and phases through the ingest pipeline", async () => {

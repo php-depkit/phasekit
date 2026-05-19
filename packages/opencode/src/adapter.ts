@@ -81,6 +81,7 @@ export type IngestPathsInput = PhasekitToolContext & {
 };
 export type AddPhaseInput = PhasekitToolContext & {
   goal: string;
+  questionAnswer?: GrillMeQuestionAnswer;
 };
 export type CreateRunInput = PhasekitToolContext & {
   phaseId: string;
@@ -187,7 +188,11 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
       return ingestProjectInputs({ rootDir: resolveRootDir(input, defaultContext), inputPaths: input.inputPaths });
     }),
     phasekit_add_phase: (input) => runTool(async () => {
-      return addPhaseFromGoal({ rootDir: resolveRootDir(input, defaultContext), goal: input.goal });
+      return addPhaseFromGoal({
+        rootDir: resolveRootDir(input, defaultContext),
+        goal: input.goal,
+        questionAnswer: input.questionAnswer,
+      });
     }),
     phasekit_create_run: (input) => runTool(async () => {
       return createPhaseRun({ rootDir: resolveRootDir(input, defaultContext), phaseId: input.phaseId });
@@ -352,13 +357,33 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
       args: {
         rootDir: schema.string().optional(),
         goal: schema.string(),
+        questionAnswer: schema
+          .object({
+            question: schema.object({
+              id: schema.string(),
+              prompt: schema.string(),
+            }),
+            requirement_ids: schema.array(schema.string()),
+            selected_recommended_option: schema
+              .object({
+                id: schema.string(),
+                text: schema.string(),
+              })
+              .optional(),
+            custom_answer_text: schema.string().optional(),
+          })
+          .optional(),
       },
       execute: async (args, context) => {
         const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
 
         return toOpenCodeToolResult(
           "Phasekit add phase",
-          await handlers.phasekit_add_phase({ rootDir: args.rootDir, goal: args.goal }),
+          await handlers.phasekit_add_phase({
+            rootDir: args.rootDir,
+            goal: args.goal,
+            questionAnswer: args.questionAnswer as GrillMeQuestionAnswer | undefined,
+          }),
         );
       },
     }),
