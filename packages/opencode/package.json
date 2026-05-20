@@ -1,6 +1,6 @@
 {
   "name": "@depkit/phasekit-opencode",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "OpenCode plugin adapter and managed artifact installer for Phasekit.",
   "license": "MIT",
@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.15.0",
-    "@depkit/phasekit-core": "0.0.0"
+    "@depkit/phasekit-core": "1.0.0"
   },
   "files": [
     "dist",
