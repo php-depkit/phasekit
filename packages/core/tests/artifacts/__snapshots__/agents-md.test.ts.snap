@@ -39,7 +39,7 @@ Markdown artifacts are not canonical state and are never proof of completion.
 
 ## Architecture Boundaries
 
-- @phasekit/core must not import adapter or install packages.
+- @depkit/phasekit-core must not import adapter or install packages.
 - Generated markdown must not drive runtime state.
 
 ## Canonical Project Rules

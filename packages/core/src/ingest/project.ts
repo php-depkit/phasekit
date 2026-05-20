@@ -514,7 +514,7 @@ async function scoutCodebaseContext(input: { rootPath: string }): Promise<SliceS
   ];
   const integrationRisks = [
     ...(normalizedFiles.includes("packages/opencode/src/adapter.ts")
-      ? ["Keep native OpenCode tool wiring thin and delegate product logic to @phasekit/core."]
+      ? ["Keep native OpenCode tool wiring thin and delegate product logic to @depkit/phasekit-core."]
       : []),
     ...(normalizedFiles.includes("packages/install/src/index.ts")
       ? ["Generated OpenCode command artifacts must stay thin wrappers around native tools."]

@@ -4,13 +4,13 @@ Phasekit is an OpenCode-first planning and execution plugin with a harness-agnos
 
 ## Status
 
-This repository is a Bun-powered TypeScript workspace. It is set up for open source collaboration and GitHub Releases, but it is not currently configured for npm publishing because the workspace packages remain `private`.
+This repository is a Bun-powered TypeScript workspace. It is set up for open source collaboration, GitHub Releases, and npm packaging for the public `@depkit/phasekit-core` and `@depkit/phasekit-opencode` packages.
 
 ## Workspace
 
-- `packages/core`: harness-agnostic planning, orchestration, verification, and artifact logic.
-- `packages/opencode`: OpenCode plugin adapter that exposes native `phasekit_*` tools.
-- `packages/install`: deterministic installer for managed OpenCode command and agent markdown artifacts.
+- `packages/core`: harness-agnostic planning, orchestration, verification, and artifact logic published as `@depkit/phasekit-core`.
+- `packages/opencode`: OpenCode plugin adapter published as `@depkit/phasekit-opencode`.
+- `packages/install`: internal workspace package that re-exports the managed OpenCode artifact installer used by `packages/opencode`.
 
 ## Requirements
 
@@ -43,7 +43,7 @@ Phasekit is designed to be driven through its OpenCode integration.
 4. Execute one approved phase with `/pk-run-phase <phase-id>`.
 5. Run scoped verification with `/pk-verify <scope>`.
 
-The native execution surface lives in `@phasekit/opencode`; generated markdown commands remain thin wrappers around those tools.
+The native execution surface lives in `@depkit/phasekit-opencode`; generated markdown commands remain thin wrappers around those tools.
 
 ## Releases
 
@@ -51,7 +51,12 @@ GitHub release automation is managed with `release-please`.
 
 - pushes to `main` or `master` run CI and release automation
 - release tags use the `vX.X.X` format
-- release creation is GitHub-only today; no npm, Homebrew, Docker, or binary publishing is configured
+- package tags are generated per public npm package
+- package tarballs can be validated locally with `npm pack ./packages/core` and `npm pack ./packages/opencode`
+- GitHub Actions publishes `@depkit/phasekit-core` before `@depkit/phasekit-opencode`
+- configure npm trusted publishers for both public packages against `.github/workflows/release.yaml`
+- publish jobs use `npm publish --provenance --access public`
+- publish jobs skip package versions that already exist on npm
 
 ## Contributing
 

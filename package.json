@@ -11,12 +11,14 @@
   ],
   "scripts": {
     "preinstall": "bunx only-allow bun",
+    "build": "bunx tsup packages/core/src/index.ts --format esm --dts --clean --out-dir packages/core/dist && bunx tsup packages/opencode/src/adapter.ts --format esm --dts --clean --out-dir packages/opencode/dist",
     "test": "bun test",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "lint": "tsc -p tsconfig.json --noEmit --pretty false"
   },
   "devDependencies": {
     "@types/bun": "latest",
+    "tsup": "^8.5.0",
     "typescript": "^5.8.3"
   }
 }

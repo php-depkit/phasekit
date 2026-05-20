@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, test } from "bun:test";
 
-import { corePackageName } from "@phasekit/core";
+import { corePackageName } from "@depkit/phasekit-core";
 import {
   createPhasekitOpenCodeTools,
   createPhasekitToolHandlers,
@@ -165,12 +165,12 @@ function parseToolOutput(result: string | { output: string }): unknown {
   return JSON.parse(typeof result === "string" ? result : result.output);
 }
 
-describe("@phasekit/opencode", () => {
-  test("imports @phasekit/core", () => {
-    expect(corePackageName).toBe("@phasekit/core");
+describe("@depkit/phasekit-opencode", () => {
+  test("imports @depkit/phasekit-core", () => {
+    expect(corePackageName).toBe("@depkit/phasekit-core");
     expect(describeOpenCodeAdapter()).toEqual({
       name: opencodePackageName,
-      core: { name: "@phasekit/core" },
+      core: { name: "@depkit/phasekit-core" },
     });
   });
 

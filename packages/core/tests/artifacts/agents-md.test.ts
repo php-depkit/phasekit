@@ -36,7 +36,7 @@ const projectContext: AgentsMdProjectContext = {
   languages: ["TypeScript"],
   frameworks: ["Zod"],
   architectureBoundaries: [
-    "@phasekit/core must not import adapter or install packages.",
+    "@depkit/phasekit-core must not import adapter or install packages.",
     "Generated markdown must not drive runtime state.",
   ],
   verificationCommands: ["bun test packages/core/tests/artifacts", "bun run typecheck"],

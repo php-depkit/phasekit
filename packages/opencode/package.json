@@ -1,15 +1,39 @@
 {
-  "name": "@phasekit/opencode",
+  "name": "@depkit/phasekit-opencode",
   "version": "0.0.0",
-  "private": true,
   "type": "module",
-  "main": "./src/adapter.ts",
+  "description": "OpenCode plugin adapter and managed artifact installer for Phasekit.",
+  "license": "MIT",
+  "main": "./dist/adapter.js",
+  "types": "./dist/adapter.d.ts",
   "exports": {
-    ".": "./src/adapter.ts"
+    ".": {
+      "types": "./dist/adapter.d.ts",
+      "import": "./dist/adapter.js"
+    }
   },
   "dependencies": {
     "@opencode-ai/plugin": "^1.15.0",
-    "@phasekit/core": "workspace:*",
-    "@phasekit/install": "workspace:*"
+    "@depkit/phasekit-core": "0.0.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/depkit/phasekit.git",
+    "directory": "packages/opencode"
+  },
+  "bugs": {
+    "url": "https://github.com/depkit/phasekit/issues"
+  },
+  "homepage": "https://github.com/depkit/phasekit#readme",
+  "scripts": {
+    "build": "tsup src/adapter.ts --format esm --dts --clean --out-dir dist",
+    "prepack": "bun run build"
   }
 }

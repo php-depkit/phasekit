@@ -32,10 +32,10 @@ const agentNames = [
   "docs-writer",
 ] as const;
 
-describe("@phasekit/install", () => {
+describe("@depkit/phasekit-install", () => {
   test("exports minimal package metadata", () => {
-    expect(installPackageName).toBe("@phasekit/install");
-    expect(describeInstallPackage()).toEqual({ name: "@phasekit/install" });
+    expect(installPackageName).toBe("@depkit/phasekit-install");
+    expect(describeInstallPackage()).toEqual({ name: "@depkit/phasekit-install" });
   });
 
   test("generates deterministic OpenCode command artifact paths under a config root", async () => {

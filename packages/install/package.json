@@ -1,8 +1,10 @@
 {
-  "name": "@phasekit/install",
+  "name": "@depkit/phasekit-install",
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "description": "Internal Phasekit workspace package for OpenCode artifact installation helpers.",
+  "license": "MIT",
   "main": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts"

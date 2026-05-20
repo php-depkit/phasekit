@@ -8,11 +8,11 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "allowImportingTsExtensions": true,
-    "baseUrl": ".",
     "paths": {
-      "@phasekit/core": ["packages/core/src/index.ts"],
-      "@phasekit/opencode": ["packages/opencode/src/adapter.ts"],
-      "@phasekit/install": ["packages/install/src/index.ts"]
+      "@depkit/phasekit-core": ["./packages/core/src/index.ts"],
+      "@depkit/phasekit-opencode": ["./packages/opencode/src/adapter.ts"],
+      "@depkit/phasekit-install": ["./packages/install/src/index.ts"],
+      "*": ["./*"]
     },
     "types": ["bun"]
   },

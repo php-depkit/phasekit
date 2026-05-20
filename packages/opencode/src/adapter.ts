@@ -34,10 +34,10 @@ import {
   type RunState,
   type TaskPlan,
   type WriteGeneratedArtifactResult,
-} from "@phasekit/core";
-import { installOpenCodeBootstrapArtifacts } from "@phasekit/install";
+} from "@depkit/phasekit-core";
+import { installOpenCodeBootstrapArtifacts } from "./install";
 
-export const opencodePackageName = "@phasekit/opencode" as const;
+export const opencodePackageName = "@depkit/phasekit-opencode" as const;
 const opencodeCommandManagedMarker = "<!-- phasekit:managed opencode-command v1 -->";
 const opencodeAgentManagedMarker = "<!-- phasekit:managed opencode-agent v1 -->";
 
@@ -78,7 +78,7 @@ export type PhasekitToolContext = {
 };
 
 export type InitProjectInput = PhasekitToolContext & InitializePlanningStateOptions;
-export type StatusInput = PhasekitToolContext & Pick<GetStatusOptions, "runId">;
+export type StatusInput = PhasekitToolContext & Partial<Pick<GetStatusOptions, "runId">>;
 export type NextActionInput = StatusInput;
 export type IngestPathsInput = PhasekitToolContext & {
   inputPaths: string[];
