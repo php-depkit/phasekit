@@ -328,6 +328,28 @@ describe("@depkit/phasekit-install", () => {
     });
   });
 
+  test("replaces the legacy plugin subpath with the package root spec", async () => {
+    await withTempDir(async (configRoot) => {
+      const configDir = join(configRoot, "opencode");
+      const configPath = join(configDir, "opencode.jsonc");
+
+      await mkdir(configDir, { recursive: true });
+      await writeFile(
+        configPath,
+        `${JSON.stringify({ plugin: ["@depkit/phasekit-opencode/plugin", "example-plugin"] }, null, 2)}\n`,
+        "utf8",
+      );
+
+      const result = await installPhasekitOpenCode({ configRoot });
+
+      expect(result.config.removedManagedPluginSpecs).toEqual(["@depkit/phasekit-opencode/plugin"]);
+      expect(await readConfigFile(configPath)).toEqual({
+        $schema: "https://opencode.ai/config.json",
+        plugin: ["example-plugin", defaultPhasekitPluginSpec],
+      });
+    });
+  });
+
   test("does not update config when project install hits unmanaged command conflicts", async () => {
     await withTempDir(async (projectDir) => {
       const commandsDir = join(projectDir, ".opencode", "commands");

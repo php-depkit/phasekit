@@ -5,10 +5,11 @@ import { dirname, join } from "node:path";
 import { applyEdits, modify, parse, type ParseError } from "jsonc-parser";
 
 export const installPackageName = "@depkit/phasekit-install" as const;
-export const defaultPhasekitPluginSpec = "@depkit/phasekit-opencode/plugin" as const;
+export const defaultPhasekitPluginSpec = "@depkit/phasekit-opencode" as const;
 
 const opencodeConfigSchemaUrl = "https://opencode.ai/config.json" as const;
-const managedPhasekitPluginSpecs = ["@depkit/phasekit-opencode", defaultPhasekitPluginSpec] as const;
+const legacyPhasekitPluginSpec = "@depkit/phasekit-opencode/plugin" as const;
+const managedPhasekitPluginSpecs = [defaultPhasekitPluginSpec, legacyPhasekitPluginSpec] as const;
 const commandManagedMarkerPrefix = "<!-- phasekit:managed opencode-command ";
 const agentManagedMarkerPrefix = "<!-- phasekit:managed opencode-agent ";
 const commandManagedMarker = "<!-- phasekit:managed opencode-command v1 -->";
