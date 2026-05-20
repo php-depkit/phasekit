@@ -1,6 +1,6 @@
 {
   "name": "@depkit/phasekit-core",
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "description": "Harness-agnostic Phasekit core for planning, orchestration, verification, and artifact generation.",
   "license": "MIT",
