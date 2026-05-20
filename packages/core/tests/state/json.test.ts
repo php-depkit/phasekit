@@ -212,6 +212,54 @@ describe("planning state initialization", () => {
     ).toEqual({});
   });
 
+  test("discovers standard init context documents from root and .planning", async () => {
+    const rootDir = await createTempDirectory();
+
+    await mkdir(join(rootDir, ".planning"), { recursive: true });
+    await writeFile(join(rootDir, "PRD.md"), "# Root PRD\n", "utf8");
+    await writeFile(join(rootDir, ".planning", "IMPLEMENTATION-GUIDE.md"), "# Guide\n", "utf8");
+
+    const result = await initializePlanningState(rootDir);
+
+    expect(result.context_documents).toEqual([
+      {
+        path: ".planning/IMPLEMENTATION-GUIDE.md",
+        text: "# Guide\n",
+        source: "discovered",
+      },
+      {
+        path: "PRD.md",
+        text: "# Root PRD\n",
+        source: "discovered",
+      },
+    ]);
+  });
+
+  test("accepts explicit init context paths and marks them explicit", async () => {
+    const rootDir = await createTempDirectory();
+
+    await mkdir(join(rootDir, "docs"), { recursive: true });
+    await writeFile(join(rootDir, "docs", "roadmap.md"), "# Roadmap\n", "utf8");
+
+    const result = await initializePlanningState(rootDir, {
+      contextPaths: ["docs/roadmap.md"],
+    });
+
+    expect(result.context_documents).toContainEqual({
+      path: "docs/roadmap.md",
+      text: "# Roadmap\n",
+      source: "explicit",
+    });
+  });
+
+  test("fails when an explicit init context path does not resolve to a file", async () => {
+    const rootDir = await createTempDirectory();
+
+    await expect(initializePlanningState(rootDir, {
+      contextPaths: ["docs/missing.md"],
+    })).rejects.toThrow("Cannot load init context document docs/missing.md: expected a file.");
+  });
+
   test("infers package manager from lockfile when package.json omits packageManager", async () => {
     const rootDir = await createTempDirectory();
 

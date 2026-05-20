@@ -1,5 +1,5 @@
 import { mkdir, readdir, readFile, stat } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 
 import { loadPhasekitConfig } from "../config/loader";
@@ -32,9 +32,16 @@ type PlanningEntry = {
 export type InitializePlanningStateOptions = {
   config?: PhasekitConfigOverride;
   configRoot?: string;
+  contextPaths?: string[];
   verificationCommandAnswer?: GrillMeQuestionAnswer;
   stackAnswer?: StackQuestionAnswer;
   confirmationAnswer?: GrillMeQuestionAnswer;
+};
+
+export type InitContextDocument = {
+  path: string;
+  text: string;
+  source: "discovered" | "explicit";
 };
 
 export type InitProjectDiscovery = {
@@ -54,6 +61,7 @@ export type InitVerificationCommandDiscovery = {
 export type InitializePlanningStateResult = {
   createdPaths: string[];
   existingPaths: string[];
+  context_documents: InitContextDocument[];
   discovery: InitProjectDiscovery;
   verification_commands: InitVerificationCommandDiscovery;
   stack_decision: StackDecision;
@@ -123,6 +131,7 @@ export async function initializePlanningState(
   const result: InitializePlanningStateResult = {
     createdPaths: [],
     existingPaths: [],
+    context_documents: [],
     discovery: {
       package_manager: "unknown",
       test_commands: [],
@@ -154,6 +163,8 @@ export async function initializePlanningState(
   for (const entry of entries) {
     await ensurePlanningEntry(rootDir, entry, result);
   }
+
+  result.context_documents = await discoverInitContextDocuments(rootDir, options.contextPaths);
 
   const resolvedConfig = await loadPhasekitConfig({
     projectRoot: rootDir,
@@ -225,6 +236,48 @@ export async function initializePlanningState(
   result.stack_decision = await resolveInitStackDecision(rootDir, stackDecision, options.stackAnswer);
 
   return result;
+}
+
+const defaultInitContextDocumentPaths = [
+  "PRD.md",
+  ".planning/PRD.md",
+  "IMPLEMENTATION-GUIDE.md",
+  ".planning/IMPLEMENTATION-GUIDE.md",
+] as const;
+
+async function discoverInitContextDocuments(rootDir: string, explicitPaths: readonly string[] | undefined): Promise<InitContextDocument[]> {
+  const documents = new Map<string, InitContextDocument>();
+
+  for (const relativePath of defaultInitContextDocumentPaths) {
+    const absolutePath = join(rootDir, relativePath);
+    if (await getExistingKind(absolutePath) !== "file") {
+      continue;
+    }
+
+    documents.set(relativePath, {
+      path: relativePath,
+      text: await readFile(absolutePath, "utf8"),
+      source: "discovered",
+    });
+  }
+
+  for (const inputPath of explicitPaths ?? []) {
+    const absolutePath = resolve(rootDir, inputPath);
+    const relativePath = toRelativePath(rootDir, absolutePath);
+    const kind = await getExistingKind(absolutePath);
+
+    if (kind !== "file") {
+      throw new Error(`Cannot load init context document ${relativePath}: expected a file.`);
+    }
+
+    documents.set(relativePath, {
+      path: relativePath,
+      text: await readFile(absolutePath, "utf8"),
+      source: "explicit",
+    });
+  }
+
+  return [...documents.values()].sort((left, right) => left.path.localeCompare(right.path));
 }
 
 async function resolveInitStackDecision(

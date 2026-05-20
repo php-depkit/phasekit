@@ -156,6 +156,7 @@ const commandTemplates: CommandTemplate[] = [
     description: "Initialize Phasekit state for this workspace.",
     body: [
       "Call the `phasekit_init_project` tool for the current workspace root.",
+      "If the user provides explicit product or implementation doc locations, pass them as `contextPaths`; otherwise rely on the tool's default discovery for `PRD.md` and `IMPLEMENTATION-GUIDE.md` in the workspace root and `.planning/`.",
       "Return the tool result directly and do not create or edit `.planning` files from this command markdown.",
     ],
   },

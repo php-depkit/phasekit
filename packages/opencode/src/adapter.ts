@@ -77,7 +77,9 @@ export type PhasekitToolContext = {
   configRoot?: string;
 };
 
-export type InitProjectInput = PhasekitToolContext & InitializePlanningStateOptions;
+export type InitProjectInput = PhasekitToolContext & InitializePlanningStateOptions & {
+  contextPaths?: string[];
+};
 export type StatusInput = PhasekitToolContext & Partial<Pick<GetStatusOptions, "runId">>;
 export type NextActionInput = StatusInput;
 export type IngestPathsInput = PhasekitToolContext & {
@@ -177,13 +179,15 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
     phasekit_init_project: (input = {}) => runTool(async () => {
       const rootDir = resolveRootDir(input, defaultContext);
       const configRoot = resolveConfigRoot(input, defaultContext);
-      const initResult = await initializePlanningState(rootDir, {
+      const initOptions = {
         config: input.config,
         configRoot,
+        contextPaths: input.contextPaths,
         verificationCommandAnswer: input.verificationCommandAnswer,
         stackAnswer: input.stackAnswer,
         confirmationAnswer: input.confirmationAnswer,
-      });
+      };
+      const initResult = await initializePlanningState(rootDir, initOptions);
 
       await installOpenCodeBootstrapArtifacts({ configRoot });
       await generateAgentsMdArtifact({
@@ -361,6 +365,7 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
       description: "Initialize Phasekit canonical .planning state when missing.",
       args: {
         rootDir: schema.string().optional(),
+        contextPaths: schema.array(schema.string()).optional(),
         confirmationAnswer: schema
           .object({
             question: schema.object({
@@ -417,6 +422,7 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
           "Phasekit init",
           await handlers.phasekit_init_project({
             rootDir: args.rootDir,
+            contextPaths: args.contextPaths,
             verificationCommandAnswer: args.verificationCommandAnswer as GrillMeQuestionAnswer | undefined,
             stackAnswer: args.stackAnswer as StackQuestionAnswer | undefined,
             confirmationAnswer: args.confirmationAnswer as GrillMeQuestionAnswer | undefined,

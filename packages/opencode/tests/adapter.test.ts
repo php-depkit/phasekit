@@ -233,6 +233,28 @@ describe("@depkit/phasekit-opencode", () => {
     });
   });
 
+  test("passes explicit init context paths through to the native init result", async () => {
+    await withTempDir(async (rootDir) => {
+      await writeTextFile(rootDir, "docs/brief.md", "# Brief\n");
+
+      const tools = createPhasekitToolHandlers({ rootDir, configRoot: join(rootDir, ".config-test") });
+      const result = await tools.phasekit_init_project({ contextPaths: ["docs/brief.md"] });
+
+      expect(result).toMatchObject({
+        ok: true,
+        data: {
+          context_documents: [
+            {
+              path: "docs/brief.md",
+              text: "# Brief\n",
+              source: "explicit",
+            },
+          ],
+        },
+      });
+    });
+  });
+
   test("init keeps managed-marker overwrite protections for bootstrap artifacts", async () => {
     await withTempDir(async (rootDir) => {
       const configRoot = join(rootDir, ".config-test");

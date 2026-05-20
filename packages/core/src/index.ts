@@ -354,6 +354,7 @@ export {
   initializePlanningState,
 } from "./state/init";
 export type {
+  InitContextDocument,
   InitializePlanningStateOptions,
   InitializePlanningStateResult,
 } from "./state/init";

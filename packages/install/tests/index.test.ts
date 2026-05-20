@@ -76,6 +76,20 @@ describe("@depkit/phasekit-install", () => {
     });
   });
 
+  test("pk-init command primes context from planning docs before tool execution", async () => {
+    await withTempDir(async (configRoot) => {
+      const artifact = generateOpenCodeCommandArtifacts({ configRoot }).find(({ name }) => name === "pk-init");
+
+      if (artifact === undefined) {
+        throw new Error("Missing pk-init generated artifact.");
+      }
+
+      expect(artifact.content).toContain("pass them as `contextPaths`");
+      expect(artifact.content).toContain("default discovery for `PRD.md` and `IMPLEMENTATION-GUIDE.md`");
+      expect(artifact.content).toContain("phasekit_init_project");
+    });
+  });
+
   test("generates a thin pk-add-phase command wrapper", async () => {
     await withTempDir(async (configRoot) => {
       const artifact = generateOpenCodeCommandArtifacts({ configRoot }).find(({ name }) => name === "pk-add-phase");
