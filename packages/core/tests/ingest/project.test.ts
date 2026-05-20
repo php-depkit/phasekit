@@ -459,7 +459,7 @@ describe("project ingest pipeline", () => {
   test("ingests the Phasekit PRD deterministically through the real pipeline", async () => {
     const rootDir = await createTempDirectory();
     await initializePlanningState(rootDir);
-    const prdText = await readFile(join(import.meta.dir, "../../../../.planning/PHASEKIT-PRD.md"), "utf8");
+    const prdText = await readFile(join(import.meta.dir, "../fixtures/sample-prd.md"), "utf8");
     await writeTextFile(rootDir, ".planning/PHASEKIT-PRD.md", prdText);
 
     const first = await ingestProjectInputs({ rootDir, inputPaths: [".planning/PHASEKIT-PRD.md"] });
