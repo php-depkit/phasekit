@@ -35,7 +35,6 @@ import {
   type TaskPlan,
   type WriteGeneratedArtifactResult,
 } from "@depkit/phasekit-core";
-import { installOpenCodeBootstrapArtifacts } from "./install";
 
 export const opencodePackageName = "@depkit/phasekit-opencode" as const;
 const opencodeCommandManagedMarker = "<!-- phasekit:managed opencode-command v1 -->";
@@ -189,7 +188,6 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
       };
       const initResult = await initializePlanningState(rootDir, initOptions);
 
-      await installOpenCodeBootstrapArtifacts({ configRoot });
       await generateAgentsMdArtifact({
         rootDir,
         projectContext: await buildInitAgentsContext(rootDir, initResult),

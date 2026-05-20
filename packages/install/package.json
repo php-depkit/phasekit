@@ -1,12 +1,43 @@
 {
   "name": "@depkit/phasekit-install",
-  "version": "0.0.0",
-  "private": true,
+  "version": "1.0.0",
   "type": "module",
-  "description": "Internal Phasekit workspace package for OpenCode artifact installation helpers.",
+  "description": "Phasekit installer CLI and OpenCode artifact management helpers.",
   "license": "MIT",
-  "main": "./src/index.ts",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "phasekit-install": "bin/phasekit-install.js"
+  },
   "exports": {
-    ".": "./src/index.ts"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "bin",
+    "dist",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/php-depkit/phasekit.git",
+    "directory": "packages/install"
+  },
+  "bugs": {
+    "url": "https://github.com/php-depkit/phasekit/issues"
+  },
+  "homepage": "https://github.com/php-depkit/phasekit#readme",
+  "dependencies": {
+    "citty": "^0.2.2",
+    "jsonc-parser": "^3.3.1"
+  },
+  "scripts": {
+    "build": "tsup src/index.ts src/cli.ts --format esm --dts --clean --out-dir dist",
+    "prepack": "bun run build"
   }
 }

@@ -188,12 +188,6 @@ describe("@depkit/phasekit-opencode", () => {
       expect(result.data.createdPaths).toContain(".planning/project.json");
       expect(result.data.createdPaths).toContain(".planning/config.json");
       expect(result.data.verification_commands.stored_in_project_config).toBe(false);
-      expect(await readFile(join(configRoot, "opencode", "commands", "pk-init.md"), "utf8")).toContain(
-        "phasekit_init_project",
-      );
-      expect(await readFile(join(configRoot, "opencode", "agents", "orchestrator.md"), "utf8")).toContain(
-        "Phasekit sub-agent stub",
-      );
       expect(await readFile(join(rootDir, "AGENTS.md"), "utf8")).toContain("<!-- phasekit:managed agents-md v1 -->");
     });
   });
@@ -255,22 +249,15 @@ describe("@depkit/phasekit-opencode", () => {
     });
   });
 
-  test("init keeps managed-marker overwrite protections for bootstrap artifacts", async () => {
+  test("init does not install OpenCode bootstrap artifacts", async () => {
     await withTempDir(async (rootDir) => {
       const configRoot = join(rootDir, ".config-test");
       const tools = createPhasekitToolHandlers({ rootDir, configRoot });
 
-      await tools.phasekit_init_project();
-      await writeFile(join(configRoot, "opencode", "commands", "pk-status.md"), "unmanaged\n", "utf8");
-
       const result = await tools.phasekit_init_project();
-      expect(result).toEqual({
-        ok: false,
-        error: {
-          code: "PHASEKIT_TOOL_ERROR",
-          message: `Refusing to overwrite unmanaged OpenCode command artifact: ${join(configRoot, "opencode", "commands", "pk-status.md")}`,
-        },
-      });
+      expect(result.ok).toBe(true);
+      await expect(readFile(join(configRoot, "opencode", "commands", "pk-init.md"), "utf8")).rejects.toThrow();
+      await expect(readFile(join(configRoot, "opencode", "agents", "orchestrator.md"), "utf8")).rejects.toThrow();
     });
   });
 

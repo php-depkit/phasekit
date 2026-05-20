@@ -1,4 +1,5 @@
 {
   "packages/core": "1.0.0",
-  "packages/opencode": "1.0.0"
+  "packages/opencode": "1.0.0",
+  "packages/install": "1.0.0"
 }

@@ -10,6 +10,10 @@
     ".": {
       "types": "./dist/adapter.d.ts",
       "import": "./dist/adapter.js"
+    },
+    "./plugin": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js"
     }
   },
   "dependencies": {
@@ -33,7 +37,7 @@
   },
   "homepage": "https://github.com/php-depkit/phasekit#readme",
   "scripts": {
-    "build": "tsup src/adapter.ts --format esm --dts --clean --out-dir dist",
+    "build": "tsup src/adapter.ts src/plugin.ts --format esm --dts --clean --out-dir dist",
     "prepack": "bun run build"
   }
 }

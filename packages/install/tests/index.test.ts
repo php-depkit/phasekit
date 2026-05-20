@@ -1,18 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  defaultPhasekitPluginSpec,
   describeInstallPackage,
   generateOpenCodeAgentArtifacts,
   generateOpenCodeCommandArtifacts,
   getOpenCodeAgentsDir,
   getOpenCodeCommandsDir,
+  installPhasekitOpenCode,
   installOpenCodeAgentArtifacts,
   installOpenCodeBootstrapArtifacts,
   installOpenCodeCommandArtifacts,
   installPackageName,
+  uninstallPhasekitOpenCode,
 } from "../src/index";
 
 const commandNames = ["pk-init", "pk-status", "pk-next", "pk-config", "pk-ingest", "pk-add-phase", "pk-run-phase", "pk-verify"] as const;
@@ -76,7 +79,7 @@ describe("@depkit/phasekit-install", () => {
     });
   });
 
-  test("pk-init command primes context from planning docs before tool execution", async () => {
+  test("pk-init command calls the native init tool without exploratory reads", async () => {
     await withTempDir(async (configRoot) => {
       const artifact = generateOpenCodeCommandArtifacts({ configRoot }).find(({ name }) => name === "pk-init");
 
@@ -84,7 +87,11 @@ describe("@depkit/phasekit-install", () => {
         throw new Error("Missing pk-init generated artifact.");
       }
 
-      expect(artifact.content).toContain("pass them as `contextPaths`");
+      expect(artifact.content).toContain("native Phasekit tool wrapper, not a project exploration task");
+      expect(artifact.content).toContain("Your next action must be to call `phasekit_init_project`");
+      expect(artifact.content).toContain("Do not call `glob`, `read`, `grep`, `bash`, or any other exploratory tool before `phasekit_init_project`");
+      expect(artifact.content).toContain("the init tool owns discovery");
+      expect(artifact.content).toContain("pass those exact paths as `contextPaths`");
       expect(artifact.content).toContain("default discovery for `PRD.md` and `IMPLEMENTATION-GUIDE.md`");
       expect(artifact.content).toContain("phasekit_init_project");
     });
@@ -269,6 +276,134 @@ describe("@depkit/phasekit-install", () => {
     });
   });
 
+  test("installs global OpenCode config, commands, and agents", async () => {
+    await withTempDir(async (configRoot) => {
+      const result = await installPhasekitOpenCode({ configRoot });
+
+      expect(result.scope).toBe("global");
+      expect(result.config.configPath).toBe(join(configRoot, "opencode", "opencode.jsonc"));
+      expect(result.config.created).toBe(true);
+      expect(result.commands.commandsDir).toBe(join(configRoot, "opencode", "commands"));
+      expect(result.agents.agentsDir).toBe(join(configRoot, "opencode", "agents"));
+
+      expect(await readConfigFile(join(configRoot, "opencode", "opencode.jsonc"))).toEqual({
+        $schema: "https://opencode.ai/config.json",
+        plugin: [defaultPhasekitPluginSpec],
+      });
+    });
+  });
+
+  test("installs project-scoped OpenCode artifacts under .opencode", async () => {
+    await withTempDir(async (projectDir) => {
+      const result = await installPhasekitOpenCode({ projectDir });
+
+      expect(result.scope).toBe("project");
+      expect(result.baseDir).toBe(join(projectDir, ".opencode"));
+      expect(result.config.configPath).toBe(join(projectDir, ".opencode", "opencode.jsonc"));
+      expect(result.commands.commandsDir).toBe(join(projectDir, ".opencode", "commands"));
+      expect(result.agents.agentsDir).toBe(join(projectDir, ".opencode", "agents"));
+    });
+  });
+
+  test("updates an existing OpenCode json config instead of creating jsonc", async () => {
+    await withTempDir(async (configRoot) => {
+      const configDir = join(configRoot, "opencode");
+      const configPath = join(configDir, "opencode.json");
+
+      await mkdir(configDir, { recursive: true });
+      await writeFile(
+        configPath,
+        `${JSON.stringify({ plugin: ["example-plugin", "@depkit/phasekit-opencode"] }, null, 2)}\n`,
+        "utf8",
+      );
+
+      const result = await installPhasekitOpenCode({ configRoot });
+
+      expect(result.config.configPath).toBe(configPath);
+      expect(await readConfigFile(configPath)).toEqual({
+        $schema: "https://opencode.ai/config.json",
+        plugin: ["example-plugin", defaultPhasekitPluginSpec],
+      });
+      await expect(readFile(join(configDir, "opencode.jsonc"), "utf8")).rejects.toThrow();
+    });
+  });
+
+  test("does not update config when project install hits unmanaged command conflicts", async () => {
+    await withTempDir(async (projectDir) => {
+      const commandsDir = join(projectDir, ".opencode", "commands");
+      const configPath = join(projectDir, ".opencode", "opencode.jsonc");
+      const unmanagedPath = join(commandsDir, "pk-next.md");
+
+      await mkdir(commandsDir, { recursive: true });
+      await writeFile(unmanagedPath, "custom project command\n", "utf8");
+
+      await expect(installPhasekitOpenCode({ projectDir })).rejects.toThrow(
+        `Refusing to overwrite unmanaged OpenCode command artifact: ${unmanagedPath}`,
+      );
+      await expect(readFile(configPath, "utf8")).rejects.toThrow();
+      expect(await readFile(unmanagedPath, "utf8")).toBe("custom project command\n");
+    });
+  });
+
+  test("force install overwrites unmanaged project command conflicts", async () => {
+    await withTempDir(async (projectDir) => {
+      const commandsDir = join(projectDir, ".opencode", "commands");
+      const configPath = join(projectDir, ".opencode", "opencode.jsonc");
+      const unmanagedPath = join(commandsDir, "pk-next.md");
+
+      await mkdir(commandsDir, { recursive: true });
+      await writeFile(unmanagedPath, "custom project command\n", "utf8");
+
+      const result = await installPhasekitOpenCode({ projectDir, overwriteUnmanaged: true });
+
+      expect(result.scope).toBe("project");
+      expect(await readConfigFile(configPath)).toEqual({
+        $schema: "https://opencode.ai/config.json",
+        plugin: [defaultPhasekitPluginSpec],
+      });
+      expect(await readFile(unmanagedPath, "utf8")).toContain("phasekit_next_action");
+      expect(await readFile(unmanagedPath, "utf8")).toStartWith("<!-- phasekit:managed opencode-command v1 -->");
+    });
+  });
+
+  test("removes superseded managed artifacts during install", async () => {
+    await withTempDir(async (configRoot) => {
+      const commandsDir = join(configRoot, "opencode", "commands");
+      const legacyPath = join(commandsDir, "pk-legacy.md");
+
+      await installOpenCodeCommandArtifacts({ configRoot });
+      await writeFile(legacyPath, "<!-- phasekit:managed opencode-command v0 -->\nlegacy\n", "utf8");
+
+      const result = await installOpenCodeCommandArtifacts({ configRoot });
+
+      expect(result.removedPaths).toContain(legacyPath);
+      await expect(readFile(legacyPath, "utf8")).rejects.toThrow();
+    });
+  });
+
+  test("uninstall removes managed plugin entries and artifacts but leaves user content", async () => {
+    await withTempDir(async (configRoot) => {
+      const configPath = join(configRoot, "opencode", "opencode.jsonc");
+      const unmanagedCommandPath = join(configRoot, "opencode", "commands", "custom.md");
+
+      await installPhasekitOpenCode({ configRoot });
+      await writeFile(
+        configPath,
+        `${JSON.stringify({ plugin: [defaultPhasekitPluginSpec, "example-plugin"] }, null, 2)}\n`,
+        "utf8",
+      );
+      await writeFile(unmanagedCommandPath, "custom command\n", "utf8");
+
+      const result = await uninstallPhasekitOpenCode({ configRoot });
+
+      expect(result.config.removedManagedPluginSpecs).toEqual([defaultPhasekitPluginSpec]);
+      expect(await readConfigFile(configPath)).toEqual({ plugin: ["example-plugin"] });
+      expect(await readFile(unmanagedCommandPath, "utf8")).toBe("custom command\n");
+      await expect(readFile(join(configRoot, "opencode", "commands", "pk-init.md"), "utf8")).rejects.toThrow();
+      await expect(readFile(join(configRoot, "opencode", "agents", "orchestrator.md"), "utf8")).rejects.toThrow();
+    });
+  });
+
   test("generates executor instructions for one claimed task and native task transitions", async () => {
     await withTempDir(async (configRoot) => {
       const artifact = generateOpenCodeAgentArtifacts({ configRoot }).find(({ name }) => name === "executor");
@@ -411,4 +546,8 @@ async function withTempDir(run: (path: string) => Promise<void>): Promise<void> 
   } finally {
     await rm(path, { recursive: true, force: true });
   }
+}
+
+async function readConfigFile(path: string): Promise<unknown> {
+  return JSON.parse(await readFile(path, "utf8"));
 }

@@ -46,7 +46,7 @@
 
 **Fix:** restore the managed file or remove the unmanaged file before rerunning `/pk-init`.
 
-**Relevant source:** `packages/opencode/src/install.ts`, `packages/core/src/artifacts/write.ts`.
+**Relevant source:** `packages/install/src/index.ts`, `packages/core/src/artifacts/write.ts`.
 
 ## Verification is blocked
 
