@@ -25,13 +25,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/depkit/phasekit.git",
+    "url": "git+https://github.com/php-depkit/phasekit.git",
     "directory": "packages/opencode"
   },
   "bugs": {
-    "url": "https://github.com/depkit/phasekit/issues"
+    "url": "https://github.com/php-depkit/phasekit/issues"
   },
-  "homepage": "https://github.com/depkit/phasekit#readme",
+  "homepage": "https://github.com/php-depkit/phasekit#readme",
   "scripts": {
     "build": "tsup src/adapter.ts --format esm --dts --clean --out-dir dist",
     "prepack": "bun run build"

@@ -1,0 +1,48 @@
+# API reference
+
+Phasekit exposes package APIs rather than a standalone CLI.
+
+## `@depkit/phasekit-core`
+
+Package entry point: `packages/core/src/index.ts`
+
+Major export groups include:
+
+- configuration: `defaultConfig`, `loadPhasekitConfig`, config schemas
+- state: `initializePlanningState`, schema helpers, JSON helpers
+- status and orchestration: `getStatus`, `getNextAction`, `orchestrateRunPhase`
+- verification: `discoverVerificationCommands`, `executeVerificationScope`, verification schemas
+- artifacts: `generateAgentsMd`, `writeGeneratedArtifact`, project artifact helpers
+- planning: ingestion helpers, phase slicing, rule helpers, greenfield helpers
+
+Minimal example:
+
+```ts
+import { getStatus, initializePlanningState } from "@depkit/phasekit-core";
+
+await initializePlanningState(process.cwd());
+const status = await getStatus({ rootDir: process.cwd() });
+```
+
+## `@depkit/phasekit-opencode`
+
+Package entry point: `packages/opencode/src/adapter.ts`
+
+Exports:
+
+- `phasekitOpenCodePlugin` default export
+- `createPhasekitOpenCodeTools(defaultContext?)`
+
+The plugin registers native `phasekit_*` tools and relies on generated `/pk-*` markdown commands and agents.
+
+## `@depkit/phasekit-install`
+
+Internal workspace package: `packages/install/src/index.ts`
+
+It re-exports the OpenCode artifact installer helpers:
+
+- `installOpenCodeBootstrapArtifacts`
+- `installOpenCodeCommandArtifacts`
+- `installOpenCodeAgentArtifacts`
+- `generateOpenCodeCommandArtifacts`
+- `generateOpenCodeAgentArtifacts`
