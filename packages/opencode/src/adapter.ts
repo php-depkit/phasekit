@@ -181,10 +181,10 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
       const initOptions = {
         config: input.config,
         configRoot,
-        contextPaths: input.contextPaths,
-        verificationCommandAnswer: input.verificationCommandAnswer,
-        stackAnswer: input.stackAnswer,
-        confirmationAnswer: input.confirmationAnswer,
+        contextPaths: normalizeContextPaths(input.contextPaths),
+        verificationCommandAnswer: normalizeQuestionAnswer(input.verificationCommandAnswer),
+        stackAnswer: normalizeQuestionAnswer(input.stackAnswer),
+        confirmationAnswer: normalizeQuestionAnswer(input.confirmationAnswer),
       };
       const initResult = await initializePlanningState(rootDir, initOptions);
 
@@ -420,10 +420,10 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
           "Phasekit init",
           await handlers.phasekit_init_project({
             rootDir: args.rootDir,
-            contextPaths: args.contextPaths,
-            verificationCommandAnswer: args.verificationCommandAnswer as GrillMeQuestionAnswer | undefined,
-            stackAnswer: args.stackAnswer as StackQuestionAnswer | undefined,
-            confirmationAnswer: args.confirmationAnswer as GrillMeQuestionAnswer | undefined,
+            contextPaths: normalizeContextPaths(args.contextPaths),
+            verificationCommandAnswer: normalizeQuestionAnswer(args.verificationCommandAnswer) as GrillMeQuestionAnswer | undefined,
+            stackAnswer: normalizeQuestionAnswer(args.stackAnswer) as StackQuestionAnswer | undefined,
+            confirmationAnswer: normalizeQuestionAnswer(args.confirmationAnswer) as GrillMeQuestionAnswer | undefined,
           }),
         );
       },
@@ -726,6 +726,37 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
       },
     }),
   };
+}
+
+type QuestionAnswerLike = {
+  question: {
+    id: string;
+    prompt: string;
+  };
+  requirement_ids: readonly string[];
+  selected_recommended_option?: {
+    id: string;
+    text: string;
+  };
+  custom_answer_text?: string;
+};
+
+function normalizeContextPaths(contextPaths: string[] | undefined): string[] | undefined {
+  return contextPaths && contextPaths.length > 0 ? contextPaths : undefined;
+}
+
+function normalizeQuestionAnswer<T extends QuestionAnswerLike>(answer: T | undefined): T | undefined {
+  if (answer === undefined) {
+    return undefined;
+  }
+
+  const hasQuestion = answer.question.id.trim().length > 0 || answer.question.prompt.trim().length > 0;
+  const hasRequirements = answer.requirement_ids.length > 0;
+  const hasRecommendedOption = answer.selected_recommended_option !== undefined
+    && (answer.selected_recommended_option.id.trim().length > 0 || answer.selected_recommended_option.text.trim().length > 0);
+  const hasCustomAnswer = answer.custom_answer_text !== undefined && answer.custom_answer_text.trim().length > 0;
+
+  return hasQuestion || hasRequirements || hasRecommendedOption || hasCustomAnswer ? answer : undefined;
 }
 
 export const phasekitOpenCodePlugin: Plugin = async (input) => {

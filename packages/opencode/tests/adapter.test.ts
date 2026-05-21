@@ -782,6 +782,48 @@ describe("@depkit/phasekit-opencode", () => {
     });
   });
 
+  test("native init tool ignores empty placeholder answer payloads", async () => {
+    await withTempDir(async (rootDir) => {
+      const context = createToolContext(rootDir);
+      const tools = createPhasekitOpenCodeTools({ rootDir, configRoot: join(rootDir, ".config-test") });
+
+      const init = await tools.phasekit_init_project.execute(
+        {
+          contextPaths: [],
+          confirmationAnswer: {
+            question: { id: "", prompt: "" },
+            requirement_ids: [],
+            selected_recommended_option: { id: "", text: "" },
+            custom_answer_text: "",
+          },
+          verificationCommandAnswer: {
+            question: { id: "", prompt: "" },
+            requirement_ids: [],
+            selected_recommended_option: { id: "", text: "" },
+            custom_answer_text: "",
+          },
+          stackAnswer: {
+            question: { id: "", prompt: "" },
+            requirement_ids: [],
+            selected_recommended_option: { id: "", text: "" },
+            custom_answer_text: "",
+          },
+        },
+        context,
+      );
+
+      expect(parseToolOutput(init)).toMatchObject({
+        ok: true,
+        data: {
+          stack_decision: {
+            kind: "question",
+            question: { id: "greenfield-stack" },
+          },
+        },
+      });
+    });
+  });
+
   test("phasekit_run_phase tool requires a second request-bound verification call", async () => {
     await withTempDir(async (rootDir) => {
       const context = createToolContext(rootDir);
