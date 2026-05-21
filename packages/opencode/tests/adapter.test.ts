@@ -824,6 +824,51 @@ describe("@depkit/phasekit-opencode", () => {
     });
   });
 
+  test("native init tool ignores foreign answer payloads from generic wrappers", async () => {
+    await withTempDir(async (rootDir) => {
+      const context = createToolContext(rootDir);
+      const tools = createPhasekitOpenCodeTools({ rootDir, configRoot: join(rootDir, ".config-test") });
+
+      const init = await tools.phasekit_init_project.execute(
+        {
+          contextPaths: [],
+          confirmationAnswer: {
+            question: { id: "confirmation", prompt: "Initialize Phasekit for this workspace?" },
+            requirement_ids: [],
+            selected_recommended_option: { id: "confirm", text: "Yes, initialize the workspace" },
+            custom_answer_text: "",
+          },
+          verificationCommandAnswer: {
+            question: { id: "verification-command", prompt: "How should Phasekit determine verification commands?" },
+            requirement_ids: [],
+            selected_recommended_option: { id: "auto-detect", text: "Auto-detect verification commands" },
+            custom_answer_text: "",
+          },
+          stackAnswer: {
+            question: { id: "stack", prompt: "How should Phasekit determine the project stack?" },
+            requirement_ids: [],
+            selected_recommended_option: { id: "auto-detect", text: "Auto-detect the project stack" },
+            custom_answer_text: "",
+          },
+        },
+        context,
+      );
+
+      expect(parseToolOutput(init)).toMatchObject({
+        ok: true,
+        data: {
+          verification_commands: {
+            requires_confirmation: false,
+          },
+          stack_decision: {
+            kind: "question",
+            question: { id: "greenfield-stack" },
+          },
+        },
+      });
+    });
+  });
+
   test("phasekit_run_phase tool requires a second request-bound verification call", async () => {
     await withTempDir(async (rootDir) => {
       const context = createToolContext(rootDir);

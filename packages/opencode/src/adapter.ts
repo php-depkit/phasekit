@@ -182,9 +182,9 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
         config: input.config,
         configRoot,
         contextPaths: normalizeContextPaths(input.contextPaths),
-        verificationCommandAnswer: normalizeQuestionAnswer(input.verificationCommandAnswer),
-        stackAnswer: normalizeQuestionAnswer(input.stackAnswer),
-        confirmationAnswer: normalizeQuestionAnswer(input.confirmationAnswer),
+        verificationCommandAnswer: normalizeQuestionAnswerForId(input.verificationCommandAnswer, "init-verify-commands"),
+        stackAnswer: normalizeQuestionAnswerForId(input.stackAnswer, "greenfield-stack"),
+        confirmationAnswer: normalizeQuestionAnswerForId(input.confirmationAnswer, "init-verify-commands"),
       };
       const initResult = await initializePlanningState(rootDir, initOptions);
 
@@ -757,6 +757,16 @@ function normalizeQuestionAnswer<T extends QuestionAnswerLike>(answer: T | undef
   const hasCustomAnswer = answer.custom_answer_text !== undefined && answer.custom_answer_text.trim().length > 0;
 
   return hasQuestion || hasRequirements || hasRecommendedOption || hasCustomAnswer ? answer : undefined;
+}
+
+function normalizeQuestionAnswerForId<T extends QuestionAnswerLike>(answer: T | undefined, expectedQuestionId: string): T | undefined {
+  const normalized = normalizeQuestionAnswer(answer);
+
+  if (normalized?.question.id !== expectedQuestionId) {
+    return undefined;
+  }
+
+  return normalized;
 }
 
 export const phasekitOpenCodePlugin: Plugin = async (input) => {
