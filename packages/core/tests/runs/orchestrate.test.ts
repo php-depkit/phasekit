@@ -279,6 +279,14 @@ describe("run-phase orchestration", () => {
     expect(result.commit_gate?.status).toBe("allowed");
     expect(result.stage).toBe("complete");
     expect(result.next_required).toBeNull();
+    expect(JSON.parse(await Bun.file(join(rootDir, ".planning", "phases.json")).text())).toEqual({
+      phases: [
+        expect.objectContaining({
+          id: "P11-T2",
+          status: "complete",
+        }),
+      ],
+    });
   });
 
   test("does not auto-complete when commit mode is ask", async () => {

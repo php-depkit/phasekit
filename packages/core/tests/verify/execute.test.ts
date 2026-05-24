@@ -52,6 +52,31 @@ describe("executeVerificationScope", () => {
     expect(persisted).toMatchObject({ id: "verify-phase-P11-T3", scope: { kind: "phase", phase_id: "P11-T3" } });
   });
 
+  test("default verification executor runs approved checks with a portable shell", async () => {
+    const rootDir = await createTempDirectory();
+    await initializePlanningState(rootDir);
+    await writeJsonFile(join(rootDir, ".planning", "config.json"), {
+      verification: {
+        commands: {
+          test: { command: "printf ok" },
+        },
+      },
+    });
+    await writeJsonFile(join(rootDir, ".planning", "phases.json"), {
+      phases: [{ id: "P11-T3", source_requirement_ids: ["REQ-1"], expected_behavior: "Verify scoped checks for phase P11-T3.", relevant_context: ["a"], likely_change_areas: ["a"], test_strategy: ["x"], integration_risks: [], done_criteria: ["x"], status: "pending" }],
+    });
+
+    const result = await executeVerificationScope({
+      rootDir,
+      scope: { kind: "phase", phase_id: "P11-T3" },
+      reviewStatus: "passed",
+    });
+
+    expect(result.status).toBe("passed");
+    expect(result.command_evidence[0]?.status).toBe("passed");
+    expect(result.command_evidence[0]?.output_references[0]?.summary).toContain("ok");
+  });
+
   test("approved missing-check IDs execute only approved discovered checks", async () => {
     const rootDir = await createTempDirectory();
     await initializePlanningState(rootDir);

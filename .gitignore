@@ -8,4 +8,6 @@ coverage/
 /.opencode
 /.planning
 !/.planning/
+tmp/
 /.pupignore
+/smoketest

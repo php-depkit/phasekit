@@ -165,6 +165,8 @@ function parseToolOutput(result: string | { output: string }): unknown {
   return JSON.parse(typeof result === "string" ? result : result.output);
 }
 
+type CommandHookInput = Parameters<NonNullable<Awaited<ReturnType<typeof phasekitOpenCodePlugin>>["command.execute.before"]>>[0];
+
 describe("@depkit/phasekit-opencode", () => {
   test("imports @depkit/phasekit-core", () => {
     expect(corePackageName).toBe("@depkit/phasekit-core");
@@ -690,6 +692,7 @@ describe("@depkit/phasekit-opencode", () => {
       "phasekit_init_project",
       "phasekit_next_action",
       "phasekit_record_blocker",
+      "phasekit_run_next_phase",
       "phasekit_run_phase",
       "phasekit_validate_plan",
       "phasekit_verify_scope",
@@ -712,6 +715,7 @@ describe("@depkit/phasekit-opencode", () => {
       "phasekit_init_project",
       "phasekit_next_action",
       "phasekit_record_blocker",
+      "phasekit_run_next_phase",
       "phasekit_run_phase",
       "phasekit_validate_plan",
       "phasekit_verify_scope",
@@ -869,6 +873,50 @@ describe("@depkit/phasekit-opencode", () => {
     });
   });
 
+  test("native init tool forwards config overrides through the OpenCode tool layer", async () => {
+    await withTempDir(async (rootDir) => {
+      const context = createToolContext(rootDir);
+      const tools = createPhasekitOpenCodeTools({ rootDir, configRoot: join(rootDir, ".config-test") });
+
+      const init = await tools.phasekit_init_project.execute(
+        {
+          config: {
+            verification: {
+              commands: {
+                test: { command: "node --version" },
+                typecheck: { command: "node --version" },
+                lint: { command: "node --version" },
+              },
+            },
+          },
+        },
+        context,
+      );
+
+      expect(parseToolOutput(init)).toMatchObject({
+        ok: true,
+        data: {
+          verification_commands: {
+            requires_confirmation: false,
+            stored_in_project_config: false,
+          },
+          discovery: {
+            test_commands: ["node --version"],
+          },
+        },
+      });
+      expect(JSON.parse(await readFile(join(rootDir, ".planning/config.json"), "utf8"))).toMatchObject({
+        verification: {
+          commands: {
+            test: { command: "node --version" },
+            typecheck: { command: "node --version" },
+            lint: { command: "node --version" },
+          },
+        },
+      });
+    });
+  });
+
   test("phasekit_run_phase tool requires a second request-bound verification call", async () => {
     await withTempDir(async (rootDir) => {
       const context = createToolContext(rootDir);
@@ -1000,7 +1048,7 @@ describe("@depkit/phasekit-opencode", () => {
         worktree: rootDir,
       } as Parameters<typeof phasekitOpenCodePlugin>[0]);
 
-      expect(Object.keys(hooks).sort()).toEqual(["tool"]);
+      expect(Object.keys(hooks).sort()).toEqual(["command.execute.before", "tool"]);
       expect(Object.keys(hooks.tool ?? {}).sort()).toEqual([
         "phasekit_add_phase",
         "phasekit_advance",
@@ -1013,11 +1061,240 @@ describe("@depkit/phasekit-opencode", () => {
         "phasekit_init_project",
         "phasekit_next_action",
         "phasekit_record_blocker",
+        "phasekit_run_next_phase",
         "phasekit_run_phase",
         "phasekit_validate_plan",
         "phasekit_verify_scope",
         "phasekit_write_artifact",
       ]);
+
+      const output = { parts: [] } as Parameters<NonNullable<typeof hooks["command.execute.before"]>>[1];
+      await hooks["command.execute.before"]?.(
+        {
+          command: "pk-init",
+          sessionID: "session-1",
+          arguments: "PRD.md docs/implementation.md",
+          directory: rootDir,
+        } as CommandHookInput,
+        output,
+      );
+
+      expect(output.parts).toHaveLength(1);
+      expect(output.parts[0]).toMatchObject({
+        type: "text",
+        synthetic: true,
+      });
+      expect(JSON.stringify(output.parts[0])).toContain("phasekit_init_project");
+      expect(JSON.stringify(output.parts[0])).toContain("PRD.md");
+      expect(JSON.stringify(output.parts[0])).toContain(rootDir);
+      expect(JSON.stringify(output.parts[0])).toContain("Do not call the `question` tool");
+    });
+  });
+
+  test("command hook maps status requests to the native tool call", async () => {
+    await withTempDir(async (rootDir) => {
+      const hooks = await phasekitOpenCodePlugin({
+        directory: rootDir,
+        worktree: rootDir,
+      } as Parameters<typeof phasekitOpenCodePlugin>[0]);
+
+      const output = { parts: [] } as Parameters<NonNullable<typeof hooks["command.execute.before"]>>[1];
+      await hooks["command.execute.before"]?.(
+        {
+          command: "pk-status",
+          sessionID: "session-1",
+          arguments: "",
+        } as CommandHookInput,
+        output,
+      );
+
+      expect(output.parts).toHaveLength(1);
+      const part = output.parts[0] as { text: string };
+      expect(part.text).toContain("phasekit_get_status({})");
+      expect(part.text).toContain("do not call any other tool");
+    });
+  });
+
+  test("command hook maps init JSON payloads to the native tool call", async () => {
+    await withTempDir(async (rootDir) => {
+      const hooks = await phasekitOpenCodePlugin({
+        directory: rootDir,
+        worktree: rootDir,
+      } as Parameters<typeof phasekitOpenCodePlugin>[0]);
+
+      const output = { parts: [] } as Parameters<NonNullable<typeof hooks["command.execute.before"]>>[1];
+      await hooks["command.execute.before"]?.(
+        {
+          command: "pk-init",
+          sessionID: "session-1",
+          arguments: '{"verificationCommandAnswer":{"question":{"id":"init-verify-commands","prompt":"Do you approve persisting discovered verification commands into .planning/config.json?"},"requirement_ids":["verification-test"],"selected_recommended_option":{"id":"approve-discovered-commands","text":"Approve and persist discovered verification commands"}}}',
+          directory: rootDir,
+        } as CommandHookInput,
+        output,
+      );
+
+      expect(output.parts).toHaveLength(1);
+      const part = output.parts[0] as { text: string };
+      expect(part.text).toContain("phasekit_init_project");
+      expect(part.text).toContain('"verificationCommandAnswer"');
+      expect(part.text).toContain('"approve-discovered-commands"');
+      expect(part.text).toContain("Do not call the `question` tool at all");
+    });
+  });
+
+  test("command hook maps add-phase goals to the native tool call", async () => {
+    await withTempDir(async (rootDir) => {
+      const hooks = await phasekitOpenCodePlugin({
+        directory: rootDir,
+        worktree: rootDir,
+      } as Parameters<typeof phasekitOpenCodePlugin>[0]);
+
+      const output = { parts: [] } as Parameters<NonNullable<typeof hooks["command.execute.before"]>>[1];
+      await hooks["command.execute.before"]?.(
+        {
+          command: "pk-add-phase",
+          sessionID: "session-1",
+          arguments: "Add a command wrapper for pk-add-phase.",
+          directory: rootDir,
+        } as CommandHookInput,
+        output,
+      );
+
+      expect(output.parts).toHaveLength(1);
+      const part = output.parts[0] as { text: string };
+      expect(part.text).toContain("phasekit_add_phase");
+      expect(part.text).toContain('"goal":"Add a command wrapper for pk-add-phase."');
+      expect(part.text).toContain("do not call any other tool");
+    });
+  });
+
+  test("command hook maps run-phase payloads to the native tool call", async () => {
+    await withTempDir(async (rootDir) => {
+      const hooks = await phasekitOpenCodePlugin({
+        directory: rootDir,
+        worktree: rootDir,
+      } as Parameters<typeof phasekitOpenCodePlugin>[0]);
+
+      const output = { parts: [] } as Parameters<NonNullable<typeof hooks["command.execute.before"]>>[1];
+      await hooks["command.execute.before"]?.(
+        {
+          command: "pk-run-phase",
+          sessionID: "session-1",
+          arguments: '{"phaseId":"P11-T2","verificationRequestId":"req-1","verificationResult":{"id":"verify-phase-P11-T2"}}',
+          directory: rootDir,
+        } as CommandHookInput,
+        output,
+      );
+
+      expect(output.parts).toHaveLength(1);
+      const part = output.parts[0] as { text: string };
+      expect(part.text).toContain("phasekit_run_phase");
+      expect(part.text).toContain('"phaseId":"P11-T2"');
+      expect(part.text).toContain('"verificationRequestId":"req-1"');
+      expect(part.text).toContain("Do not call `bash`, `question`, or any unrelated tool");
+    });
+  });
+
+  test("command hook maps argument-free run-phase requests to native next-action guidance", async () => {
+    await withTempDir(async (rootDir) => {
+      const hooks = await phasekitOpenCodePlugin({
+        directory: rootDir,
+        worktree: rootDir,
+      } as Parameters<typeof phasekitOpenCodePlugin>[0]);
+
+      const output = { parts: [] } as Parameters<NonNullable<typeof hooks["command.execute.before"]>>[1];
+      await hooks["command.execute.before"]?.(
+        {
+          command: "pk-run-phase",
+          sessionID: "session-1",
+          arguments: "",
+          directory: rootDir,
+        } as CommandHookInput,
+        output,
+      );
+
+      expect(output.parts).toHaveLength(1);
+      const part = output.parts[0] as { text: string };
+      expect(part.text).toContain("phasekit_run_next_phase({})");
+      expect(part.text).toContain("Do not invent plans, execution evidence, verification payloads, repair loops, or shell commands");
+      expect(part.text).toContain("Respond with that result directly and stop");
+    });
+  });
+
+  test("command hook maps verify payloads to the native tool call", async () => {
+    await withTempDir(async (rootDir) => {
+      const hooks = await phasekitOpenCodePlugin({
+        directory: rootDir,
+        worktree: rootDir,
+      } as Parameters<typeof phasekitOpenCodePlugin>[0]);
+
+      const output = { parts: [] } as Parameters<NonNullable<typeof hooks["command.execute.before"]>>[1];
+      await hooks["command.execute.before"]?.(
+        {
+          command: "pk-verify",
+          sessionID: "session-1",
+          arguments: '{"scope":{"kind":"phase","phase_id":"P11-T2"},"reviewStatus":"passed"}',
+          directory: rootDir,
+        } as CommandHookInput,
+        output,
+      );
+
+      expect(output.parts).toHaveLength(1);
+      const part = output.parts[0] as { text: string };
+      expect(part.text).toContain("phasekit_verify_scope");
+      expect(part.text).toContain('"phase_id":"P11-T2"');
+      expect(part.text).toContain('"reviewStatus":"passed"');
+    });
+  });
+
+  test("command hook prefers per-command workspace directory", async () => {
+    await withTempDir(async (rootDir) => {
+      const hooks = await phasekitOpenCodePlugin({
+        directory: "/",
+        worktree: "/",
+      } as Parameters<typeof phasekitOpenCodePlugin>[0]);
+
+      const output = { parts: [] } as Parameters<NonNullable<typeof hooks["command.execute.before"]>>[1];
+      await hooks["command.execute.before"]?.(
+        {
+          command: "pk-init",
+          sessionID: "session-2",
+          arguments: "",
+          directory: rootDir,
+        } as CommandHookInput,
+        output,
+      );
+
+      expect(output.parts).toHaveLength(1);
+      expect(JSON.stringify(output.parts[0])).toContain(`Current workspace root: ${rootDir}`);
+    });
+  });
+
+  test("command hook falls back to process cwd when plugin root is slash", async () => {
+    const originalCwd = process.cwd();
+    await withTempDir(async (rootDir) => {
+      process.chdir(rootDir);
+      try {
+        const hooks = await phasekitOpenCodePlugin({
+          directory: "/",
+          worktree: "/",
+        } as Parameters<typeof phasekitOpenCodePlugin>[0]);
+
+        const output = { parts: [] } as Parameters<NonNullable<typeof hooks["command.execute.before"]>>[1];
+        await hooks["command.execute.before"]?.(
+          {
+            command: "pk-init",
+            sessionID: "session-3",
+            arguments: "",
+          } as CommandHookInput,
+          output,
+        );
+
+        expect(output.parts).toHaveLength(1);
+        expect(JSON.stringify(output.parts[0])).toContain(`Current workspace root: ${rootDir}`);
+      } finally {
+        process.chdir(originalCwd);
+      }
     });
   });
 

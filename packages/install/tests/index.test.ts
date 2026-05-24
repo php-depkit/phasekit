@@ -91,8 +91,11 @@ describe("@depkit/phasekit-install", () => {
       expect(artifact.content).toContain("Your next action must be to call `phasekit_init_project`");
       expect(artifact.content).toContain("Do not call `glob`, `read`, `grep`, `bash`, or any other exploratory tool before `phasekit_init_project`");
       expect(artifact.content).toContain("the init tool owns discovery");
+      expect(artifact.content).toContain("Do not call the `question` tool at all for this wrapper");
       expect(artifact.content).toContain("pass those exact paths as `contextPaths`");
       expect(artifact.content).toContain("default discovery for `PRD.md` and `IMPLEMENTATION-GUIDE.md`");
+      expect(artifact.content).toContain("relay that payload directly and stop");
+      expect(artifact.content).toContain("do not call any other tool");
       expect(artifact.content).toContain("phasekit_init_project");
     });
   });
@@ -110,6 +113,7 @@ describe("@depkit/phasekit-install", () => {
       expect(artifact.content).toContain("phasekit_add_phase");
       expect(artifact.content).toContain("goal");
       expect(artifact.content).toContain("user-provided goal");
+      expect(artifact.content).toContain("do not call any other tool");
       expect(artifact.content).not.toContain("extractSourceRequirements");
       expect(artifact.content).not.toContain("sliceRequirementsIntoPhases");
     });
@@ -128,6 +132,7 @@ describe("@depkit/phasekit-install", () => {
       expect(artifact.content).toContain("phasekit_ingest_paths");
       expect(artifact.content).toContain("inputPaths");
       expect(artifact.content).toContain("user-provided paths");
+      expect(artifact.content).toContain("do not call any other tool");
       expect(artifact.content).not.toContain("expandIngestPaths");
       expect(artifact.content).not.toContain("extractSourceRequirements");
       expect(artifact.content).not.toContain("/phasekit:ingest");
@@ -145,14 +150,18 @@ describe("@depkit/phasekit-install", () => {
       expect(artifact.path).toBe(join(configRoot, "opencode", "commands", "pk-run-phase.md"));
       expect(artifact.content).toContain("# /pk-run-phase");
       expect(artifact.content).toContain("phasekit_run_phase");
-      expect(artifact.content).toContain("phasekit_next_action");
-      expect(artifact.content).toContain("phasekit_get_status");
-      expect(artifact.content).toContain("user provides a phase id");
-      expect(artifact.content).toContain("does not provide a phase id");
+      expect(artifact.content).toContain("phasekit_run_next_phase({})");
+      expect(artifact.content).toContain("Do not call `phasekit_next_action`, `phasekit_create_run`, `phasekit_advance`, `phasekit_verify_scope`, `bash`, or any unrelated tool");
+      expect(artifact.content).toContain("Do not implement planning, task execution, review, verification, repair loops, commit-gating, package installation, shell commands, or `.planning` mutations");
+      expect(artifact.content).toContain("do not retry and do not call any other tool");
+      expect(artifact.content).toContain("If the user provides a phase id or JSON payload");
+      expect(artifact.content).toContain("If the user provides no arguments");
       expect(artifact.content).not.toContain("readRunState");
       expect(artifact.content).not.toContain("claimRunTask");
       expect(artifact.content).not.toContain("completeRunTask");
       expect(artifact.content).not.toContain("recordRunBlocker");
+      expect(artifact.content).not.toContain("/phasekit:create-run");
+      expect(artifact.content).not.toContain("/phasekit:advance");
       expect(artifact.content).not.toContain("/phasekit:run-phase");
     });
   });
@@ -168,7 +177,8 @@ describe("@depkit/phasekit-install", () => {
       expect(artifact.path).toBe(join(configRoot, "opencode", "commands", "pk-next.md"));
       expect(artifact.content).toContain("# /pk-next");
       expect(artifact.content).toContain("phasekit_next_action");
-      expect(artifact.content).toContain("do not advance state");
+      expect(artifact.content).toContain("Do not advance state");
+      expect(artifact.content).toContain("do not call any other tool");
       expect(artifact.content).not.toContain("phasekit_advance");
     });
   });
@@ -187,6 +197,7 @@ describe("@depkit/phasekit-install", () => {
       expect(artifact.content).toContain("user-provided verification scope");
       expect(artifact.content).toContain("task, phase, group, or all scope");
       expect(artifact.content).toContain("matching phase run context is available");
+      expect(artifact.content).toContain("do not call any other tool");
       expect(artifact.content).not.toContain("verifyScopeSchema");
       expect(artifact.content).not.toContain("verificationResultSchema");
       expect(artifact.content).not.toContain("writeRunState");

@@ -4,16 +4,30 @@
   "type": "module",
   "description": "OpenCode plugin adapter and managed artifact installer for Phasekit.",
   "license": "MIT",
-  "main": "./dist/adapter.js",
-  "types": "./dist/adapter.d.ts",
+  "main": "./plugin.cjs",
+  "types": "./dist/plugin.d.ts",
+  "oc-plugin": [
+    "server"
+  ],
   "exports": {
     ".": {
-      "types": "./dist/adapter.d.ts",
-      "import": "./dist/adapter.js"
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js",
+      "require": "./plugin.cjs"
+    },
+    "./server": {
+      "types": "./dist/plugin.d.ts",
+      "import": "./dist/plugin.js",
+      "require": "./plugin.cjs"
     },
     "./plugin": {
       "types": "./dist/plugin.d.ts",
-      "import": "./dist/plugin.js"
+      "import": "./dist/plugin.js",
+      "require": "./plugin.cjs"
+    },
+    "./adapter": {
+      "types": "./dist/adapter.d.ts",
+      "import": "./dist/adapter.js"
     }
   },
   "dependencies": {
@@ -21,6 +35,7 @@
     "@depkit/phasekit-core": "1.0.0"
   },
   "files": [
+    "plugin.cjs",
     "dist",
     "README.md"
   ],

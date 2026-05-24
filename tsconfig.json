@@ -10,11 +10,12 @@
     "allowImportingTsExtensions": true,
     "paths": {
       "@depkit/phasekit-core": ["./packages/core/src/index.ts"],
-      "@depkit/phasekit-opencode": ["./packages/opencode/src/adapter.ts"],
+      "@depkit/phasekit-opencode": ["./packages/opencode/src/plugin.ts"],
+      "@depkit/phasekit-opencode/adapter": ["./packages/opencode/src/adapter.ts"],
       "@depkit/phasekit-install": ["./packages/install/src/index.ts"],
       "*": ["./*"]
     },
     "types": ["bun"]
   },
-  "include": ["packages/**/*.ts"]
+  "include": ["packages/**/*.ts", "scripts/**/*.ts"]
 }

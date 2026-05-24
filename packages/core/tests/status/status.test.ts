@@ -117,7 +117,7 @@ describe("status and next action", () => {
     });
   });
 
-  test("reports an active run and only the next allowed stage", async () => {
+  test("reports an active run to resume through orchestration", async () => {
     const rootDir = await createTempDirectory();
     await initializePlanningState(rootDir);
     await writePhases(rootDir, [phase("in_progress")]);
@@ -133,10 +133,10 @@ describe("status and next action", () => {
       state: "active",
     });
     expect(status.next_action).toMatchObject({
-      kind: "advance_run_stage",
+      kind: "resume_run",
       run_id: "run-1",
       current_stage: "planning",
-      target_stage: "execution",
+      target_stage: "planning",
       allowed_next_stages: ["execution"],
     });
   });
@@ -199,7 +199,8 @@ describe("status and next action", () => {
       },
     });
 
-    expect(nextAction.target_stage).toBe("review");
+    expect(nextAction.kind).toBe("resume_run");
+    expect(nextAction.target_stage).toBe("execution");
     expect(nextAction.allowed_next_stages).toEqual(["review"]);
   });
 
@@ -273,7 +274,7 @@ describe("status and next action", () => {
 
     expect(status.state).toBe("complete");
     expect(status.current_phase?.status).toBe("complete");
-    expect(status.current_run?.state).toBe("complete");
+    expect(status.current_run).toBe(null);
     expect(status.next_action.kind).toBe("no_action");
   });
 

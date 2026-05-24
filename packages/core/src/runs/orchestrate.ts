@@ -4,7 +4,7 @@ import { basename, dirname, extname, join, relative } from "node:path";
 
 import { loadPhasekitConfig } from "../config/loader";
 import { evaluateCommitGate, type CommitChangeKind } from "../git/policy";
-import { readJsonFile } from "../state/json";
+import { readJsonFile, writeJsonFile } from "../state/json";
 import { phasesStateSchema, requirementsStateSchema, phaseSchema } from "../state/schema";
 import { verificationResultSchema, type VerificationResult } from "../verify/schemas";
 import { createPhaseRun, readRunState, writeRunState } from "./persistence";
@@ -223,6 +223,11 @@ export async function orchestrateRunPhase(input: RunPhaseOrchestrationInput): Pr
 
     if (commitGate.status === "allowed" || commitGate.status === "disabled") {
       currentRun = await advanceRunStage({ rootDir, runId: currentRun.id, targetStage: "complete" });
+      await writeJsonFile(join(planningDir, "phases.json"), {
+        phases: phasesState.phases.map((candidate) =>
+          candidate.id === phase.id ? { ...candidate, status: "complete" } : candidate
+        ),
+      });
     }
   }
 

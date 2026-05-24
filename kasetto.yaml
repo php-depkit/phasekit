@@ -43,6 +43,14 @@ skills:
     skills:
       - typescript-pro
       - code-documenter
-  - source: https://github.com/igorwarzocha/opencode-workflows 
-    skills: 
+  - source: https://github.com/TerminalSkills/skills
+    sub-dir: skills
+    skills:
+      - bun
+      - monorepo-manager
+      - tsup
+      - zod
+      - github-actions
+  - source: https://github.com/igorwarzocha/opencode-workflows
+    skills:
       - create-opencode-plugin

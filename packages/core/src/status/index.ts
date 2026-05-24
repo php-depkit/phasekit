@@ -246,7 +246,9 @@ function selectRun(runs: RunState[], runId?: string): RunState | null {
     return runs.find((run) => run.id === runId) ?? null;
   }
 
-  return activeRuns[0] ?? runs.at(-1) ?? null;
+  // Completed runs should not control next-action selection.
+  // When there is no active run, prefer selecting the next phase from canonical phase status.
+  return activeRuns[0] ?? null;
 }
 
 function selectCurrentPhase(phases: PhasesState, run: RunState | null): StatusPhase | null {
@@ -362,11 +364,11 @@ export function getNextAction(input: {
     }
 
     return action(
-      "advance_run_stage",
-      `Advance run ${currentRun.id} to ${targetStage}.`,
-      "Only the next allowed run stage may be selected.",
+      "resume_run",
+      `Resume run ${currentRun.id} at ${currentRun.stage}.`,
+      "Active runs must continue through phase orchestration instead of raw stage advancement.",
       currentRun,
-      targetStage,
+      currentRun.stage,
       allowedNextStages,
     );
   }

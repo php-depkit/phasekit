@@ -1,5 +1,5 @@
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 
 import { loadPhasekitConfig } from "../config/loader";
 import { parseStateFile } from "../state/parse";
@@ -160,16 +160,50 @@ export async function executeVerificationScope(input: VerifyScopeExecutionInput)
 }
 
 async function defaultCommandExecutor(command: string, cwd: string): Promise<{ ok: boolean; summary: string }> {
-  const proc = Bun.spawn(["bash", "-lc", command], { cwd, stdout: "pipe", stderr: "pipe" });
-  const [stdout, stderr, code] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  return {
-    ok: code === 0,
-    summary: [stdout.trim(), stderr.trim()].filter(Boolean).join("\n").slice(0, 500) || `exit code ${code}`,
-  };
+  const shellEnv = buildVerificationShellEnv();
+  let lastError: unknown;
+  for (const shell of [["bash", "-lc"], ["/bin/sh", "-c"], ["sh", "-c"]] as const) {
+    try {
+      const proc = Bun.spawn([...shell, command], { cwd, stdout: "pipe", stderr: "pipe", env: shellEnv });
+      const [stdout, stderr, code] = await Promise.all([
+        new Response(proc.stdout).text(),
+        new Response(proc.stderr).text(),
+        proc.exited,
+      ]);
+      return {
+        ok: code === 0,
+        summary: [stdout.trim(), stderr.trim()].filter(Boolean).join("\n").slice(0, 500) || `exit code ${code}`,
+      };
+    } catch (error) {
+      lastError = error;
+      if (!isMissingExecutableError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw lastError;
+}
+
+function isMissingExecutableError(error: unknown) {
+  return error instanceof Error && /Executable not found in \$PATH/.test(error.message);
+}
+
+function buildVerificationShellEnv() {
+  const env = { ...process.env };
+  const bunPath = Bun.which("bun");
+  if (!bunPath) {
+    return env;
+  }
+
+  const bunBinDir = dirname(bunPath);
+  const currentPath = env.PATH ?? "";
+  const segments = currentPath.split(delimiter).filter(Boolean);
+  if (!segments.includes(bunBinDir)) {
+    env.PATH = currentPath.length > 0 ? `${bunBinDir}${delimiter}${currentPath}` : bunBinDir;
+  }
+
+  return env;
 }
 
 async function loadApprovedCommands(rootDir: string): Promise<{ approvedCommands: VerificationCommand[]; discoveredCommands: VerificationCommand[] }> {
@@ -178,13 +212,14 @@ async function loadApprovedCommands(rootDir: string): Promise<{ approvedCommands
   let packageMetadata: { packageManager: PackageManager; scripts: Record<string, string> }[] = [];
   try {
     const pkg = JSON.parse(await readFile(packageFile, "utf8")) as { packageManager?: string; scripts?: Record<string, string> };
-    const packageManager: PackageManager = pkg.packageManager?.startsWith("npm")
+    const declaredPackageManager: PackageManager = pkg.packageManager?.startsWith("npm")
       ? "npm"
       : pkg.packageManager?.startsWith("pnpm")
         ? "pnpm"
         : pkg.packageManager?.startsWith("yarn")
           ? "yarn"
           : "bun";
+    const packageManager = resolveAvailablePackageManager(declaredPackageManager);
     packageMetadata = [{ packageManager, scripts: pkg.scripts ?? {} }];
   } catch {
     packageMetadata = [];
@@ -211,6 +246,26 @@ async function loadApprovedCommands(rootDir: string): Promise<{ approvedCommands
   }
 
   return { approvedCommands, discoveredCommands };
+}
+
+function resolveAvailablePackageManager(preferred: PackageManager): PackageManager {
+  const candidates: PackageManager[] = [preferred, "bun", "npm", "pnpm", "yarn"];
+  const seen = new Set<PackageManager>();
+  for (const candidate of candidates) {
+    if (seen.has(candidate)) {
+      continue;
+    }
+    seen.add(candidate);
+
+    // Bun runtime is a non-negotiable dependency, so we can safely rely on Bun.which.
+    // If the declared package manager isn't available in the current environment (eg. smoketest container),
+    // fall back to the first installed one.
+    if (Bun.which(candidate)) {
+      return candidate;
+    }
+  }
+
+  return preferred;
 }
 
 function verificationScopeId(scope: VerifyScope): string {

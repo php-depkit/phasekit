@@ -1,4 +1,4 @@
-import { tool, type Plugin, type ToolDefinition, type ToolResult } from "@opencode-ai/plugin";
+import { tool, type Hooks, type Plugin, type ToolDefinition, type ToolResult } from "@opencode-ai/plugin";
 import { readFile } from "node:fs/promises";
 import { basename } from "node:path";
 import {
@@ -148,6 +148,7 @@ export type PhasekitToolHandlers = {
   phasekit_ingest_paths(input: IngestPathsInput): Promise<PhasekitToolResult<IngestProjectResult>>;
   phasekit_add_phase(input: AddPhaseInput): Promise<PhasekitToolResult<AddPhaseFromGoalResult>>;
   phasekit_create_run(input: CreateRunInput): Promise<PhasekitToolResult<CreateRunResult>>;
+  phasekit_run_next_phase(input?: PhasekitToolContext): Promise<PhasekitToolResult<RunPhaseOrchestrationResult>>;
   phasekit_run_phase(input: RunPhaseInput): Promise<PhasekitToolResult<RunPhaseOrchestrationResult>>;
   phasekit_validate_plan(input: ValidatePlanInput): Promise<PhasekitToolResult<TaskPlan>>;
   phasekit_claim_task(input: ClaimTaskInput): Promise<PhasekitToolResult<RunState>>;
@@ -161,6 +162,14 @@ export type PhasekitToolHandlers = {
 
 export type PhasekitOpenCodeTools = {
   [Name in keyof PhasekitToolHandlers]: ToolDefinition;
+};
+
+type CommandExecuteBeforeInput = {
+  command: string;
+  sessionID: string;
+  arguments: string;
+  directory?: string;
+  worktree?: string;
 };
 
 export function describeOpenCodeAdapter(): {
@@ -219,6 +228,17 @@ export function createPhasekitToolHandlers(defaultContext: PhasekitToolContext =
     }),
     phasekit_create_run: (input) => runTool(async () => {
       return createPhaseRun({ rootDir: resolveRootDir(input, defaultContext), phaseId: input.phaseId });
+    }),
+    phasekit_run_next_phase: (input = {}) => runTool(async () => {
+      const rootDir = resolveRootDir(input, defaultContext);
+      const status = await getStatus({ rootDir });
+      const nextAction = status.next_action;
+
+      if (!nextAction.phase_id) {
+        throw new Error("Cannot run next phase: next_action.phase_id is missing.");
+      }
+
+      return orchestrateRunPhase({ rootDir, phaseId: nextAction.phase_id });
     }),
     phasekit_run_phase: (input) => runTool(async () => {
       return orchestrateRunPhase({
@@ -311,6 +331,7 @@ const phasekitToolNames = [
   "phasekit_ingest_paths",
   "phasekit_add_phase",
   "phasekit_create_run",
+  "phasekit_run_next_phase",
   "phasekit_run_phase",
   "phasekit_validate_plan",
   "phasekit_claim_task",
@@ -363,6 +384,7 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
       description: "Initialize Phasekit canonical .planning state when missing.",
       args: {
         rootDir: schema.string().optional(),
+        config: schema.unknown().optional(),
         contextPaths: schema.array(schema.string()).optional(),
         confirmationAnswer: schema
           .object({
@@ -420,6 +442,7 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
           "Phasekit init",
           await handlers.phasekit_init_project({
             rootDir: args.rootDir,
+            config: args.config as InitializePlanningStateOptions["config"],
             contextPaths: normalizeContextPaths(args.contextPaths),
             verificationCommandAnswer: normalizeQuestionAnswer(args.verificationCommandAnswer) as GrillMeQuestionAnswer | undefined,
             stackAnswer: normalizeQuestionAnswer(args.stackAnswer) as StackQuestionAnswer | undefined,
@@ -540,6 +563,20 @@ export function createPhasekitOpenCodeTools(defaultContext: PhasekitToolContext 
         return toOpenCodeToolResult(
           "Phasekit create run",
           await handlers.phasekit_create_run({ rootDir: args.rootDir, phaseId: args.phaseId }),
+        );
+      },
+    }),
+    phasekit_run_next_phase: tool({
+      description: "Run the next Phasekit phase selected by native status without model inference.",
+      args: {
+        rootDir: schema.string().optional(),
+      },
+      execute: async (args, context) => {
+        const handlers = createPhasekitToolHandlers(resolveToolContext(context, defaultContext));
+
+        return toOpenCodeToolResult(
+          "Phasekit run next phase",
+          await handlers.phasekit_run_next_phase({ rootDir: args.rootDir }),
         );
       },
     }),
@@ -770,12 +807,42 @@ function normalizeQuestionAnswerForId<T extends QuestionAnswerLike>(answer: T | 
 }
 
 export const phasekitOpenCodePlugin: Plugin = async (input) => {
+  const rootDir = resolveRuntimeRootDir(input.worktree || input.directory);
+
   return {
-    tool: createPhasekitOpenCodeTools({ rootDir: input.worktree || input.directory }),
-  };
+    tool: createPhasekitOpenCodeTools({ rootDir }),
+    "command.execute.before": async (hookInput, output) => {
+      const hookWorktree = "worktree" in hookInput && typeof hookInput.worktree === "string"
+        ? hookInput.worktree
+        : undefined;
+      const hookDirectory = "directory" in hookInput && typeof hookInput.directory === "string"
+        ? hookInput.directory
+        : undefined;
+      const commandRootDir = resolveRuntimeRootDir(hookWorktree || hookDirectory || rootDir);
+      if (!commandRootDir) {
+        return;
+      }
+
+      const injectedPart = createCommandInstructionPart({ rootDir: commandRootDir, ...hookInput });
+      if (!injectedPart) {
+        return;
+      }
+
+      output.parts.unshift(injectedPart);
+    },
+  } satisfies Hooks;
 };
 
 export default phasekitOpenCodePlugin;
+
+function resolveRuntimeRootDir(rootDir: string | undefined): string | undefined {
+  if (!rootDir || rootDir === "/") {
+    const cwd = process.cwd();
+    return cwd && cwd !== "/" ? cwd : undefined;
+  }
+
+  return rootDir;
+}
 
 function resolveRootDir(input: PhasekitToolContext, defaultContext: PhasekitToolContext): string {
   return input.rootDir ?? defaultContext.rootDir ?? process.cwd();
@@ -793,6 +860,215 @@ function resolveToolContext(
     rootDir: defaultContext.rootDir ?? context.worktree ?? context.directory,
     configRoot: defaultContext.configRoot,
   };
+}
+
+function createCommandInstructionPart(input: CommandExecuteBeforeInput & { rootDir: string }) {
+  switch (input.command) {
+    case "pk-init": {
+      const toolInput = parseInitCommandInput(input.arguments);
+      const toolCall = `phasekit_init_project(${JSON.stringify(toolInput)})`;
+
+      return {
+        id: `prt_phasekit_command_hook_${input.sessionID}_${input.command}`,
+        sessionID: input.sessionID,
+        messageID: `msg_phasekit_command_hook_${input.command}`,
+        type: "text" as const,
+        synthetic: true,
+        text: [
+          "Phasekit command hook: `/pk-init` is a native init wrapper.",
+          `Current workspace root: ${input.rootDir}`,
+          `User command arguments: ${input.arguments.trim().length > 0 ? input.arguments : "(none)"}`,
+          `Next action must be to call ${toolCall} for this workspace.`,
+          "Do not inspect files, infer stack, or use exploratory tools before the native init call.",
+          "Do not call the `question` tool at all for `/pk-init`, even if the tool schema includes optional answer fields.",
+          "If `/pk-init` has no arguments, call `phasekit_init_project({})` exactly and let the tool return any discovery or follow-up questions in its result.",
+          "If the tool result includes a question payload, relay that payload directly in your response and stop. Do not answer it yourself or open a separate question flow.",
+          "After the tool returns, do not call any other tool. Respond with the tool result directly and stop.",
+        ].join("\n"),
+      };
+    }
+    case "pk-status": {
+      return createSingleNativeCommandInstructionPart(input, {
+        commandLabel: "/pk-status",
+        toolCall: "phasekit_get_status({})",
+      });
+    }
+    case "pk-next": {
+      return createSingleNativeCommandInstructionPart(input, {
+        commandLabel: "/pk-next",
+        toolCall: "phasekit_next_action({})",
+      });
+    }
+    case "pk-config": {
+      return {
+        id: `prt_phasekit_command_hook_${input.sessionID}_${input.command}`,
+        sessionID: input.sessionID,
+        messageID: `msg_phasekit_command_hook_${input.command}`,
+        type: "text" as const,
+        synthetic: true,
+        text: [
+          "Phasekit command hook: `/pk-config` is a thin native wrapper.",
+          `Current workspace root: ${input.rootDir}`,
+          `User command arguments: ${input.arguments.trim().length > 0 ? input.arguments : "(none)"}`,
+          "Next action must be to call `phasekit_get_status({})` for this workspace.",
+          "Call `phasekit_next_action({})` only if you need extra guidance after the status result.",
+          "Do not inspect files, rewrite configuration, or substitute markdown logic before or after the native calls.",
+          "Do not call `bash`, `question`, or any unrelated tool for `/pk-config`.",
+          "After the native result or optional native guidance call, respond with the tool result(s) directly and stop.",
+        ].join("\n"),
+      };
+    }
+    case "pk-ingest": {
+      const inputPaths = parseCommandArgumentPaths(input.arguments);
+      if (inputPaths.length === 0) {
+        return undefined;
+      }
+
+      return createSingleNativeCommandInstructionPart(input, {
+        commandLabel: "/pk-ingest",
+        toolCall: `phasekit_ingest_paths(${JSON.stringify({ inputPaths })})`,
+      });
+    }
+    case "pk-add-phase": {
+      const toolInput = parseAddPhaseCommandInput(input.arguments);
+      if (!toolInput) {
+        return undefined;
+      }
+
+      return createSingleNativeCommandInstructionPart(input, {
+        commandLabel: "/pk-add-phase",
+        toolCall: `phasekit_add_phase(${JSON.stringify(toolInput)})`,
+      });
+    }
+    case "pk-run-phase": {
+      const toolInput = parseRunPhaseCommandInput(input.arguments);
+      if (!toolInput) {
+        return {
+          id: `prt_phasekit_command_hook_${input.sessionID}_${input.command}`,
+          sessionID: input.sessionID,
+          messageID: `msg_phasekit_command_hook_${input.command}`,
+          type: "text" as const,
+          synthetic: true,
+          text: [
+             "Phasekit command hook: `/pk-run-phase` is a native wrapper.",
+             `Current workspace root: ${input.rootDir}`,
+             "No explicit phase id or payload was provided.",
+             "Next action must be to call `phasekit_run_next_phase({})` exactly once.",
+             "Do not invent plans, execution evidence, verification payloads, repair loops, or shell commands in this wrapper.",
+             "Do not call `bash`, `question`, `phasekit_verify_scope`, or any unrelated tool as part of `/pk-run-phase`.",
+             "After the native run-phase result returns, do not call any other tool. Respond with that result directly and stop.",
+           ].join("\n"),
+         };
+      }
+
+      return createSingleNativeCommandInstructionPart(input, {
+        commandLabel: "/pk-run-phase",
+        toolCall: `phasekit_run_phase(${JSON.stringify(toolInput)})`,
+      });
+    }
+    case "pk-verify": {
+      const toolInput = parseJsonCommandObject(input.arguments);
+      if (!toolInput) {
+        return undefined;
+      }
+
+      return createSingleNativeCommandInstructionPart(input, {
+        commandLabel: "/pk-verify",
+        toolCall: `phasekit_verify_scope(${JSON.stringify(toolInput)})`,
+      });
+    }
+    default:
+      return undefined;
+  }
+}
+
+function createSingleNativeCommandInstructionPart(
+  input: CommandExecuteBeforeInput & { rootDir: string },
+  command: { commandLabel: string; toolCall: string },
+) {
+  return {
+    id: `prt_phasekit_command_hook_${input.sessionID}_${input.command}`,
+    sessionID: input.sessionID,
+    messageID: `msg_phasekit_command_hook_${input.command}`,
+    type: "text" as const,
+    synthetic: true,
+    text: [
+      `Phasekit command hook: \
+\`${command.commandLabel}\` is a native wrapper when arguments map directly to a tool payload.`,
+      `Current workspace root: ${input.rootDir}`,
+      `User command arguments: ${input.arguments.trim().length > 0 ? input.arguments : "(none)"}`,
+      `Next action must be to call ${command.toolCall} for this workspace.`,
+      "Do not rewrite the payload, inspect files, or substitute markdown command logic before the native tool call.",
+      `Do not call \`bash\`, \`question\`, or any unrelated tool before or after ${command.toolCall}.`,
+      "Even if the tool returns ok:false (a native error), do not retry. Return the first tool result directly and stop.",
+      "After the tool returns, do not call any other tool. Respond with the tool result directly and stop.",
+    ].join("\n"),
+  };
+}
+
+function parseAddPhaseCommandInput(argumentsText: string): Record<string, unknown> | undefined {
+  const trimmed = argumentsText.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  const parsedObject = parseJsonCommandObject(argumentsText);
+  if (parsedObject) {
+    return parsedObject;
+  }
+
+  return { goal: trimmed };
+}
+
+function parseCommandArgumentPaths(argumentsText: string) {
+  const trimmed = argumentsText.trim();
+  if (trimmed.length === 0) {
+    return [];
+  }
+
+  return trimmed.split(/\s+/);
+}
+
+function parseInitCommandInput(argumentsText: string): Record<string, unknown> {
+  const parsedObject = parseJsonCommandObject(argumentsText);
+  if (parsedObject) {
+    return parsedObject;
+  }
+
+  const contextPaths = parseCommandArgumentPaths(argumentsText);
+  return contextPaths.length > 0 ? { contextPaths } : {};
+}
+
+function parseRunPhaseCommandInput(argumentsText: string): Record<string, unknown> | undefined {
+  const trimmed = argumentsText.trim();
+  if (trimmed.length === 0) {
+    return undefined;
+  }
+
+  const parsedObject = parseJsonCommandObject(argumentsText);
+  if (parsedObject) {
+    return parsedObject;
+  }
+
+  return { phaseId: trimmed };
+}
+
+function parseJsonCommandObject(argumentsText: string): Record<string, unknown> | undefined {
+  const trimmed = argumentsText.trim();
+  if (!trimmed.startsWith("{")) {
+    return undefined;
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return undefined;
+  }
+
+  return undefined;
 }
 
 function toOpenCodeToolResult<T>(title: string, result: PhasekitToolResult<T>): ToolResult {

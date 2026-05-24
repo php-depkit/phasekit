@@ -1,1 +1,3 @@
-export { default } from "./adapter";
+import phasekitOpenCodePlugin from "./adapter";
+
+export default phasekitOpenCodePlugin;

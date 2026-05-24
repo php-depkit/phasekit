@@ -12,6 +12,7 @@
   "scripts": {
     "preinstall": "bunx only-allow bun",
     "build": "bunx tsup packages/core/src/index.ts --format esm --dts --clean --out-dir packages/core/dist && bunx tsup packages/opencode/src/adapter.ts packages/opencode/src/plugin.ts --format esm --dts --clean --out-dir packages/opencode/dist && bunx tsup packages/install/src/index.ts packages/install/src/cli.ts --format esm --dts --clean --out-dir packages/install/dist",
+    "smoke:opencode": "bun run ./scripts/run-opencode-acp-smoke.ts",
     "release:build": "bun run build",
     "release:publish": "bun run release:build && node ./scripts/publish-package.mjs",
     "release:publish:dry-run": "bun run release:build && node ./scripts/publish-package.mjs --dry-run",

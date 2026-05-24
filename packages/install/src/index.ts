@@ -142,8 +142,10 @@ const commandTemplates: CommandTemplate[] = [
       "Your next action must be to call `phasekit_init_project` for the current workspace root.",
       "Do not call `glob`, `read`, `grep`, `bash`, or any other exploratory tool before `phasekit_init_project`.",
       "Do not inspect files, infer stack, infer verification commands, or manually read PRD/implementation documents; the init tool owns discovery.",
+      "Do not call the `question` tool at all for this wrapper; if init needs confirmation, the tool result will return the question payload.",
       "If the user provides explicit product or implementation document paths as command arguments, pass those exact paths as `contextPaths`. Otherwise omit `contextPaths` and rely on the tool's default discovery for `PRD.md` and `IMPLEMENTATION-GUIDE.md` in the workspace root and `.planning/`.",
-      "After the tool returns, return its result directly and stop. Do not create or edit `.planning` files from this command markdown.",
+      "If the tool result includes a question payload, relay that payload directly and stop. Do not answer it yourself or open a separate question flow.",
+      "After the tool returns, do not call any other tool. Return its result directly and stop. Do not create or edit `.planning` files from this command markdown.",
     ],
   },
   {
@@ -151,7 +153,8 @@ const commandTemplates: CommandTemplate[] = [
     description: "Show current Phasekit status.",
     body: [
       "Call the `phasekit_get_status` tool for the current workspace root.",
-      "Return the tool result directly and do not infer status from files or chat history.",
+      "Do not infer status from files or chat history.",
+      "After the tool returns, do not call any other tool. Return the tool result directly and stop.",
     ],
   },
   {
@@ -159,7 +162,8 @@ const commandTemplates: CommandTemplate[] = [
     description: "Show the next valid Phasekit action.",
     body: [
       "Call the `phasekit_next_action` tool for the current workspace root.",
-      "Return the tool result directly and do not advance state or guess the next stage in this command markdown.",
+      "Do not advance state or guess the next stage in this command markdown.",
+      "After the tool returns, do not call any other tool. Return the tool result directly and stop.",
     ],
   },
   {
@@ -168,6 +172,8 @@ const commandTemplates: CommandTemplate[] = [
     body: [
       "Call the `phasekit_get_status` tool for the current workspace root, then call `phasekit_next_action` only if more guidance is needed.",
       "Report the tool results without reading, merging, or rewriting configuration in this command markdown.",
+      "Do not call `bash`, `question`, or unrelated tools in this wrapper.",
+      "After the native result or optional native guidance call, return the tool result(s) directly and stop.",
     ],
   },
   {
@@ -175,7 +181,8 @@ const commandTemplates: CommandTemplate[] = [
     description: "Ingest one or more product input paths through Phasekit.",
     body: [
       "Call the `phasekit_ingest_paths` tool for the current workspace root with the user-provided paths as `inputPaths`.",
-      "Return the tool result directly and do not expand paths, extract requirements, or write `.planning` state from this command markdown.",
+      "Do not expand paths, extract requirements, or write `.planning` state from this command markdown.",
+      "After the tool returns, do not call any other tool. Return the tool result directly and stop.",
     ],
   },
   {
@@ -183,16 +190,20 @@ const commandTemplates: CommandTemplate[] = [
     description: "Add one Phasekit phase from a short goal.",
     body: [
       "Call the `phasekit_add_phase` tool for the current workspace root with the user-provided goal as `goal`.",
-      "Return the tool result directly and do not create requirements, plan slices, or write `.planning` state from this command markdown.",
+      "Do not create requirements, plan slices, or write `.planning` state from this command markdown.",
+      "After the tool returns, do not call any other tool. Return the tool result directly and stop.",
     ],
   },
   {
     name: "pk-run-phase",
     description: "Run or resume one Phasekit phase through native tools.",
     body: [
-      "If the user provides a phase id, pass that id to the native `phasekit_run_phase` tool for the current workspace root.",
-      "If the user does not provide a phase id, call `phasekit_next_action` and follow the returned native Phasekit tool direction instead of guessing from files or chat history.",
-      "Use `phasekit_get_status` to report current run state after tool calls and do not implement planning, task execution, review, verification, commit-gating, or `.planning` mutations in this command markdown.",
+      "This command is a thin native wrapper.",
+      "If the user provides no arguments, call `phasekit_run_next_phase({})` exactly once for the current workspace root.",
+      "If the user provides a phase id or JSON payload, call `phasekit_run_phase` exactly once with that exact payload.",
+      "Do not call `phasekit_next_action`, `phasekit_create_run`, `phasekit_advance`, `phasekit_verify_scope`, `bash`, or any unrelated tool as part of this wrapper.",
+      "Do not implement planning, task execution, review, verification, repair loops, commit-gating, package installation, shell commands, or `.planning` mutations in this command markdown.",
+      "After the native tool returns (even if it reports an error), do not retry and do not call any other tool. Return the tool result directly and stop.",
     ],
   },
   {
@@ -200,8 +211,9 @@ const commandTemplates: CommandTemplate[] = [
     description: "Execute scoped Phasekit verification through native tools.",
     body: [
       "Call the `phasekit_verify_scope` tool for the current workspace root with the user-provided verification scope as `scope`.",
-      "Return the tool result directly; native tools execute approved checks and persist `.planning/verifications/<scope-id>.json`. Focused repair follow-up is created on failure only when a matching phase run context is available to update.",
+      "Native tools execute approved checks and persist `.planning/verifications/<scope-id>.json`. Focused repair follow-up is created on failure only when a matching phase run context is available to update.",
       "If the tool reports a missing or invalid scope, ask for a task, phase, group, or all scope instead of inventing one.",
+      "After the tool returns, do not call any other tool. Return the tool result directly and stop.",
     ],
   },
 ];
