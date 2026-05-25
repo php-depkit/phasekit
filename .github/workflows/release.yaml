@@ -122,6 +122,8 @@ jobs:
       - name: Publish core package
         if: ${{ steps.core-version.outputs.should_publish == 'true' }}
         working-directory: packages/core
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
 
   publish-opencode:
@@ -179,6 +181,8 @@ jobs:
       - name: Publish opencode package
         if: ${{ steps.opencode-version.outputs.should_publish == 'true' }}
         working-directory: packages/opencode
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
 
   publish-install:
@@ -236,4 +240,6 @@ jobs:
       - name: Publish install package
         if: ${{ steps.install-version.outputs.should_publish == 'true' }}
         working-directory: packages/install
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
