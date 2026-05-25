@@ -1,6 +1,6 @@
 {
   "name": "@depkit/phasekit-install",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Phasekit installer CLI and OpenCode artifact management helpers.",
   "license": "MIT",

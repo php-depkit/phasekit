@@ -1,5 +1,28 @@
 # Changelog
 
+## [1.1.0](https://github.com/php-depkit/phasekit/compare/phasekit-opencode-v1.0.0...phasekit-opencode-v1.1.0) (2026-05-25)
+
+
+### Features
+
+* **init:** discover planning context docs ([f2de4ce](https://github.com/php-depkit/phasekit/commit/f2de4ce3562f484a519f20fca5734b9ddcb5f6df))
+* **install:** publish opencode installer ([ea8e84b](https://github.com/php-depkit/phasekit/commit/ea8e84bab53cb5e29a463be8803290425c404f39))
+
+
+### Bug Fixes
+
+* **install:** use root opencode plugin spec ([f5fe3df](https://github.com/php-depkit/phasekit/commit/f5fe3dfdea6303f0a60af70a25dbecea63b7eee0))
+* **opencode:** ignore empty init answer payloads ([5426c5f](https://github.com/php-depkit/phasekit/commit/5426c5ffec593eadcd0d784ac24b7f868a8bbf1e))
+* **opencode:** ignore foreign init answer payloads ([4948ef6](https://github.com/php-depkit/phasekit/commit/4948ef6ecd21f554393c46d047498bb364260945))
+* **opencode:** tighten wrappers and add smoke harness ([80dda14](https://github.com/php-depkit/phasekit/commit/80dda143a3cff1bf09f086ba19b071ef20450765))
+
+
+### Dependencies
+
+* The following workspace dependencies were updated
+  * dependencies
+    * @depkit/phasekit-core bumped from 1.0.0 to 1.1.0
+
 ## 1.0.0 (2026-05-20)
 
 

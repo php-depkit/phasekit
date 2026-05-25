@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.0](https://github.com/php-depkit/phasekit/compare/phasekit-core-v1.0.0...phasekit-core-v1.1.0) (2026-05-25)
+
+
+### Features
+
+* **init:** discover planning context docs ([f2de4ce](https://github.com/php-depkit/phasekit/commit/f2de4ce3562f484a519f20fca5734b9ddcb5f6df))
+
+
+### Bug Fixes
+
+* **opencode:** tighten wrappers and add smoke harness ([80dda14](https://github.com/php-depkit/phasekit/commit/80dda143a3cff1bf09f086ba19b071ef20450765))
+
 ## 1.0.0 (2026-05-20)
 
 
